@@ -9,13 +9,14 @@
 
 param(
     [string]$Rls = (Join-Path $PSScriptRoot "..\data\Symgram_16.rls"),
-    [string]$Out = (Join-Path $PSScriptRoot "..\gfx\preview_ui.png")
+    [string]$Out = (Join-Path $PSScriptRoot "..\docs\images\chat-list.png")
 )
 
 Add-Type -AssemblyName System.Drawing
 
 $Rls = [System.IO.Path]::GetFullPath($Rls)
 $Out = [System.IO.Path]::GetFullPath($Out)
+New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetDirectoryName($Out)) | Out-Null
 
 # --- strings from the resource ------------------------------------------------
 $rlsText = [System.IO.File]::ReadAllText($Rls, [System.Text.Encoding]::UTF8)

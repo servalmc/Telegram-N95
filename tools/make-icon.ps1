@@ -6,13 +6,16 @@
 
 param(
     [int]$Size = 88,
-    [string]$OutDir = (Join-Path $PSScriptRoot "..\gfx")
+    [string]$OutDir = (Join-Path $PSScriptRoot "..\gfx"),
+    [string]$DocDir = (Join-Path $PSScriptRoot "..\docs\images")
 )
 
 Add-Type -AssemblyName System.Drawing
 
 $OutDir = [System.IO.Path]::GetFullPath($OutDir)
+$DocDir = [System.IO.Path]::GetFullPath($DocDir)
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
+New-Item -ItemType Directory -Force -Path $DocDir | Out-Null
 
 $brandBlue = [System.Drawing.Color]::FromArgb(0x22, 0x9E, 0xD9)
 $foldBlue  = [System.Drawing.Color]::FromArgb(0xD2, 0xE5, 0xF1)
@@ -42,7 +45,7 @@ $g.FillPolygon((New-Object System.Drawing.SolidBrush([System.Drawing.Color]::Whi
 $g.FillPolygon((New-Object System.Drawing.SolidBrush($foldBlue)), [System.Drawing.PointF[]]$fold)
 $g.Dispose()
 $icon.Save((Join-Path $OutDir "Symgram.bmp"), [System.Drawing.Imaging.ImageFormat]::Bmp)
-$icon.Save((Join-Path $OutDir "preview_icon.png"), [System.Drawing.Imaging.ImageFormat]::Png)
+$icon.Save((Join-Path $DocDir "icon.png"), [System.Drawing.Imaging.ImageFormat]::Png)
 $icon.Dispose()
 
 # --- transparency mask: white where the icon is opaque -----------------------
