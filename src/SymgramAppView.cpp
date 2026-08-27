@@ -6,6 +6,9 @@
 #include <stringloader.h>
 #include <aknnotewrappers.h>
 #include <aknquerydialog.h>
+#include <aknlistquerydialog.h>
+#include <eiklbm.h>
+#include <e32err.h>
 #include <Symgram.rsg>
 
 #include "SymgramVersion.h"
@@ -86,9 +89,9 @@ CSymgramAppView::CSymgramAppView()
     : iTitleFont( NULL ), iNameFont( NULL ), iTextFont( NULL ),
       iStatus( NULL ), iSignInTitle( NULL ), iSignInHint( NULL ),
       iEmptyTitle( NULL ), iEmptyDetail( NULL ), iCodeTitle( NULL ), iCodeHint( NULL ),
-      iPasswordPrompt( NULL ),
+      iPasswordPrompt( NULL ), iFieldCountry( NULL ), iFieldPhone( NULL ),
       iCountries( NULL ), iSignedIn( EFalse ), iAwaitingCode( EFalse ),
-      iAwaitingPassword( EFalse ), iFocus( 1 ), iCountry( 0 ),
+      iAwaitingPassword( EFalse ), iFocus( 0 ), iCountry( 0 ),
       iSession( NULL ), iPasswordIdle( NULL ), iNavDown( 0 ),
       iSelected( 0 ), iTopRow( 0 )
     {
@@ -108,6 +111,8 @@ CSymgramAppView::~CSymgramAppView()
     delete iCodeTitle;
     delete iCodeHint;
     delete iPasswordPrompt;
+    delete iFieldCountry;
+    delete iFieldPhone;
     }
 
 void CSymgramAppView::ConstructL( const TRect& aRect )
@@ -126,6 +131,8 @@ void CSymgramAppView::ConstructL( const TRect& aRect )
     iCodeTitle   = StringLoader::LoadL( R_SYMGRAM_CODE_TITLE );
     iCodeHint    = StringLoader::LoadL( R_SYMGRAM_CODE_HINT );
     iPasswordPrompt = StringLoader::LoadL( R_SYMGRAM_PASSWORD_PROMPT );
+    iFieldCountry = StringLoader::LoadL( R_SYMGRAM_FIELD_COUNTRY );
+    iFieldPhone = StringLoader::LoadL( R_SYMGRAM_FIELD_PHONE );
 
     iCountries = CEikonEnv::Static()->ReadDesCArrayResourceL( R_SYMGRAM_COUNTRIES );
     iSession = CSymgramSession::NewL( *this );
@@ -243,7 +250,14 @@ TKeyResponse CSymgramAppView::OfferKeyEventL( const TKeyEvent& aKeyEvent,
             {
             if ( !iSignedIn )
                 {
-                NextL();
+                if ( !iAwaitingCode && !iAwaitingPassword && iFocus == 0 )
+                    {
+                    QueryCountryL();
+                    }
+                else
+                    {
+                    NextL();
+                    }
                 return EKeyWasConsumed;
                 }
             }
@@ -300,7 +314,14 @@ TKeyResponse CSymgramAppView::OfferKeyEventL( const TKeyEvent& aKeyEvent,
 
             case EKeyDevice3:
             case EKeyEnter:
-                NextL();
+                if ( !iAwaitingCode && !iAwaitingPassword && iFocus == 0 )
+                    {
+                    QueryCountryL();
+                    }
+                else
+                    {
+                    NextL();
+                    }
                 return EKeyWasConsumed;
 
             default:
@@ -315,27 +336,19 @@ void CSymgramAppView::HandleArrowL( TInt aDir )
     {
     if ( !iSignedIn )
         {
-        if ( iAwaitingCode )
+        if ( iAwaitingCode || iAwaitingPassword )
             {
             return;
             }
-        if ( aDir == 1 )
+        if ( aDir == 1 || aDir == 3 )
             {
             iFocus = 0;
             DrawDeferred();
             }
-        else if ( aDir == 2 )
+        else if ( aDir == 2 || aDir == 4 )
             {
             iFocus = 1;
             DrawDeferred();
-            }
-        else if ( aDir == 3 )
-            {
-            CycleCountry( -1 );
-            }
-        else if ( aDir == 4 )
-            {
-            CycleCountry( 1 );
             }
         return;
         }
@@ -378,7 +391,11 @@ void CSymgramAppView::HandleBackspace()
 TInt CSymgramAppView::PasswordIdleCb( TAny* aPtr )
     {
     CSymgramAppView* self = static_cast<CSymgramAppView*>( aPtr );
-    TRAP_IGNORE( self->QueryPasswordL() );
+    TRAPD( err, self->QueryPasswordL() );
+    if ( err != KErrNone )
+        {
+        TRAP_IGNORE( self->SessionFailedL( err ) );
+        }
     return 0;
     }
 
@@ -585,6 +602,37 @@ void CSymgramAppView::DrawRow( CWindowGc& aGc, const TRect& aRect,
                   TPoint( aRect.iBr.iX, aRect.iBr.iY - 1 ) );
     }
 
+void CSymgramAppView::DrawSignInField( CWindowGc& aGc, const TRect& aRow,
+                                       TBool aOn, const TDesC& aLeft,
+                                       const TDesC& aRight ) const
+    {
+    aGc.SetPenStyle( CGraphicsContext::ENullPen );
+    aGc.SetBrushStyle( CGraphicsContext::ESolidBrush );
+    aGc.SetBrushColor( aOn ? Brand() : Rule() );
+    aGc.DrawRect( aRow );
+
+    if ( !aOn )
+        {
+        aGc.SetPenStyle( CGraphicsContext::ESolidPen );
+        aGc.SetPenColor( Muted() );
+        aGc.SetBrushStyle( CGraphicsContext::ENullBrush );
+        aGc.DrawRect( aRow );
+        }
+
+    aGc.UseFont( iNameFont );
+    aGc.SetPenStyle( CGraphicsContext::ESolidPen );
+    aGc.SetPenColor( aOn ? Paper() : Ink() );
+    aGc.SetBrushStyle( CGraphicsContext::ENullBrush );
+    TRect cleft( aRow );
+    cleft.iTl.iX += 10;
+    const TInt mid = ( aRow.Height() + iNameFont->AscentInPixels() ) / 2;
+    aGc.DrawText( aLeft, cleft, mid, CGraphicsContext::ELeft );
+    TRect cright( aRow );
+    cright.iBr.iX -= 8;
+    aGc.DrawText( aRight, cright, mid, CGraphicsContext::ERight );
+    aGc.DiscardFont();
+    }
+
 void CSymgramAppView::DrawSignIn( CWindowGc& aGc, const TRect& aRect ) const
     {
     if ( !iNameFont || !iTextFont )
@@ -609,51 +657,53 @@ void CSymgramAppView::DrawSignIn( CWindowGc& aGc, const TRect& aRect ) const
                       iNameFont->AscentInPixels(), CGraphicsContext::ELeft );
         aGc.DiscardFont();
         }
-    y += nameH + 14;
+    y += nameH + 10;
 
-    const TInt rowH = nameH + 12;
+    const TInt rowH = nameH + 14;
 
     if ( !iAwaitingCode )
         {
-        TRect countryRow( aRect.iTl.iX + 6, y, aRect.iBr.iX - 6, y + rowH );
-        aGc.SetPenStyle( CGraphicsContext::ENullPen );
-        aGc.SetBrushStyle( CGraphicsContext::ESolidBrush );
-        aGc.SetBrushColor( iFocus == 0 ? Highlight() : Rule() );
-        aGc.DrawRect( countryRow );
+        if ( iFieldCountry )
+            {
+            aGc.UseFont( iTextFont );
+            aGc.SetPenColor( iFocus == 0 ? Brand() : Muted() );
+            aGc.DrawText( *iFieldCountry,
+                          TRect( aRect.iTl.iX + 8, y, aRect.iBr.iX - 8, y + textH ),
+                          iTextFont->AscentInPixels(), CGraphicsContext::ELeft );
+            aGc.DiscardFont();
+            y += textH + 2;
+            }
 
+        TRect countryRow( aRect.iTl.iX + 6, y, aRect.iBr.iX - 6, y + rowH );
         TBuf<32> country;
         CountryName( country );
-        TBuf<12> code;
-        code.Num( CallingCode() );
         TBuf<16> plus;
         plus.Append( '+' );
+        TBuf<12> code;
+        code.Num( CallingCode() );
         plus.Append( code );
-
-        aGc.UseFont( iNameFont );
-        aGc.SetPenStyle( CGraphicsContext::ESolidPen );
-        aGc.SetPenColor( Ink() );
-        aGc.SetBrushStyle( CGraphicsContext::ENullBrush );
-        TRect cleft( countryRow );
-        cleft.iTl.iX += 8;
-        aGc.DrawText( country, cleft,
-                      ( rowH + iNameFont->AscentInPixels() ) / 2,
-                      CGraphicsContext::ELeft );
-        TRect cright( countryRow );
-        cright.iBr.iX -= 8;
-        aGc.DrawText( plus, cright,
-                      ( rowH + iNameFont->AscentInPixels() ) / 2,
-                      CGraphicsContext::ERight );
-        aGc.DiscardFont();
+        _LIT( KOpen, ">" );
+        if ( plus.Length() + KOpen().Length() <= plus.MaxLength() )
+            {
+            plus.Append( KOpen );
+            }
+        DrawSignInField( aGc, countryRow, iFocus == 0, country, plus );
         y += rowH + 8;
         }
 
-    TRect phoneRow( aRect.iTl.iX + 6, y, aRect.iBr.iX - 6, y + rowH );
-    aGc.SetPenStyle( CGraphicsContext::ENullPen );
-    aGc.SetBrushStyle( CGraphicsContext::ESolidBrush );
-    aGc.SetBrushColor( ( iAwaitingCode || iFocus == 1 ) ? Highlight() : Rule() );
-    aGc.DrawRect( phoneRow );
+    if ( iFieldPhone && !iAwaitingCode )
+        {
+        aGc.UseFont( iTextFont );
+        aGc.SetPenColor( iFocus == 1 ? Brand() : Muted() );
+        aGc.DrawText( *iFieldPhone,
+                      TRect( aRect.iTl.iX + 8, y, aRect.iBr.iX - 8, y + textH ),
+                      iTextFont->AscentInPixels(), CGraphicsContext::ELeft );
+        aGc.DiscardFont();
+        y += textH + 2;
+        }
 
-    TBuf<24> shown;
+    TRect phoneRow( aRect.iTl.iX + 6, y, aRect.iBr.iX - 6, y + rowH );
+    TBuf<28> shown;
     if ( iAwaitingCode )
         {
         shown.Copy( iSmsCode );
@@ -667,17 +717,14 @@ void CSymgramAppView::DrawSignIn( CWindowGc& aGc, const TRect& aRect ) const
         shown.Append( ' ' );
         shown.Append( iPhone );
         }
-
-    aGc.UseFont( iNameFont );
-    aGc.SetPenStyle( CGraphicsContext::ESolidPen );
-    aGc.SetPenColor( Ink() );
-    aGc.SetBrushStyle( CGraphicsContext::ENullBrush );
-    TRect pleft( phoneRow );
-    pleft.iTl.iX += 8;
-    aGc.DrawText( shown, pleft,
-                  ( rowH + iNameFont->AscentInPixels() ) / 2,
-                  CGraphicsContext::ELeft );
-    aGc.DiscardFont();
+    if ( ( iAwaitingCode || iFocus == 1 ) &&
+         shown.Length() < shown.MaxLength() )
+        {
+        shown.Append( '_' );
+        }
+    _LIT( KEmptyRight, "" );
+    DrawSignInField( aGc, phoneRow, ( iAwaitingCode || iFocus == 1 ),
+                     shown, KEmptyRight );
     y += rowH + 10;
 
     const HBufC* hint = iAwaitingCode ? iCodeHint : iSignInHint;
@@ -710,24 +757,31 @@ TInt CSymgramAppView::CallingCode() const
     return 7;
     }
 
-void CSymgramAppView::CycleCountry( TInt aDelta )
+void CSymgramAppView::CycleCountry( TInt /*aDelta*/ )
     {
-    if ( iAwaitingCode )
+    QueryCountryL();
+    }
+
+void CSymgramAppView::QueryCountryL()
+    {
+    if ( iSignedIn || iAwaitingCode || iAwaitingPassword )
         {
         return;
         }
-    const TInt n = iCountries ? iCountries->Count() : KCountryCount;
-    if ( n <= 0 )
+    TInt index = iCountry;
+    CAknListQueryDialog* dlg = new ( ELeave ) CAknListQueryDialog( &index );
+    dlg->PrepareLC( R_SYMGRAM_COUNTRY_QUERY );
+    if ( iCountries )
         {
-        return;
+        dlg->SetItemTextArray( iCountries );
+        dlg->SetOwnershipType( ELbmDoesNotOwnItemArray );
         }
-    iCountry = ( iCountry + aDelta ) % n;
-    if ( iCountry < 0 )
+    if ( dlg->RunLD() )
         {
-        iCountry += n;
+        iCountry = index;
+        iFocus = 1;
+        DrawDeferred();
         }
-    iFocus = 0;
-    DrawDeferred();
     }
 
 void CSymgramAppView::NextL()
@@ -782,7 +836,7 @@ void CSymgramAppView::NextL()
 
 void CSymgramAppView::QueryPasswordL()
     {
-    TBuf<64> pwd;
+    TBuf<128> pwd;
     CAknTextQueryDialog* dlg = CAknTextQueryDialog::NewL( pwd );
     CleanupStack::PushL( dlg );
     if ( iPwdHint.Length() > 0 )
@@ -793,7 +847,8 @@ void CSymgramAppView::QueryPasswordL()
         {
         dlg->SetPromptL( *iPasswordPrompt );
         }
-    dlg->SetMaxLength( 64 );
+    dlg->SetMaxLength( 128 );
+    dlg->SetPredictiveTextInputPermitted( EFalse );
     CleanupStack::Pop( dlg );
     TBool ok = EFalse;
     TInt qerr = KErrNone;
@@ -809,6 +864,14 @@ void CSymgramAppView::QueryPasswordL()
         }
     if ( !ok )
         {
+        _LIT( KCancel, "Введите пароль — Опции → Далее" );
+        SetStatusL( KCancel );
+        return;
+        }
+    if ( pwd.Length() < 1 )
+        {
+        _LIT( KEmpty, "Пароль пустой" );
+        SetStatusL( KEmpty );
         return;
         }
     TBuf8<192> utf;
@@ -836,8 +899,24 @@ void CSymgramAppView::QueryPasswordL()
     _LIT( KWait, "Проверка пароля..." );
     SetStatusL( KWait );
     DrawNow();
-    iSession->SubmitPasswordL( utf );
+    CEikonEnv::Static()->BusyMsgL( KWait );
+    TInt leaveErr = KErrNone;
+    TInt sendErr = KErrNone;
+    TRAP( leaveErr, sendErr = iSession->SubmitPasswordL( utf ) );
+    CEikonEnv::Static()->BusyMsgCancel();
     utf.FillZ();
+    if ( leaveErr != KErrNone )
+        {
+        sendErr = leaveErr;
+        }
+    if ( sendErr != KErrNone )
+        {
+        TBuf<40> text;
+        _LIT( KFail, "Пароль не принят " );
+        text.Copy( KFail );
+        text.AppendNum( sendErr );
+        SetStatusL( text );
+        }
     }
 
 void CSymgramAppView::SessionStatusL( const TDesC& aText )
@@ -847,10 +926,18 @@ void CSymgramAppView::SessionStatusL( const TDesC& aText )
 
 void CSymgramAppView::SessionFailedL( TInt aError )
     {
-    TBuf<32> text;
-    _LIT( KErr, "Ошибка " );
-    text.Copy( KErr );
-    text.AppendNum( aError );
+    TBuf<40> text;
+    if ( aError == KErrDisconnected )
+        {
+        _LIT( KDrop, "Связь оборвалась" );
+        text.Copy( KDrop );
+        }
+    else
+        {
+        _LIT( KErr, "Ошибка " );
+        text.Copy( KErr );
+        text.AppendNum( aError );
+        }
     SetStatusL( text );
 
     CAknErrorNote* note = new ( ELeave ) CAknErrorNote( ETrue );

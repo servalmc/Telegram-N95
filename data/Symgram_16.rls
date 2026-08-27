@@ -32,7 +32,10 @@ rls_string STRING_r_symgram_status_unsigned "Нет входа"
 rls_string STRING_r_symgram_signin_title "Ваш номер телефона"
 
 //d:Hint under the phone field.
-rls_string STRING_r_symgram_signin_hint "Код придёт в Telegram или по SMS"
+rls_string STRING_r_symgram_signin_hint "Вверх/вниз — поле, центр — список стран"
+
+rls_string STRING_r_symgram_field_country "Страна"
+rls_string STRING_r_symgram_field_phone "Номер"
 
 //d:Status after Telegram answered the first handshake packet.
 rls_string STRING_r_symgram_pq_ok "Telegram ответил"

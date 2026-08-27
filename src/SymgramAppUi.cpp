@@ -1,6 +1,8 @@
 #include <avkon.hrh>
 #include <aknnotewrappers.h>
 #include <stringloader.h>
+#include <e32keys.h>
+#include <w32std.h>
 #include <Symgram.rsg>
 
 #include "Symgram.hrh"
@@ -26,6 +28,7 @@ CSymgramAppUi::~CSymgramAppUi()
 void CSymgramAppUi::ConstructL()
     {
     BaseConstructL( EAknEnableSkin );
+    SetKeyBlockMode( ENoKeyBlock );
 
     iAppView = CSymgramAppView::NewL( ClientRect() );
     AddToStackL( iAppView );
@@ -71,6 +74,60 @@ void CSymgramAppUi::HandleStatusPaneSizeChange()
         {
         iAppView->SetRect( ClientRect() );
         }
+    }
+
+TBool CSymgramAppUi::IsNaviKey( const TKeyEvent& aKey ) const
+    {
+    switch ( aKey.iScanCode )
+        {
+        case EStdKeyUpArrow:
+        case EStdKeyDownArrow:
+        case EStdKeyLeftArrow:
+        case EStdKeyRightArrow:
+        case EStdKeyDevice3:
+        case EStdKeyEnter:
+            return ETrue;
+        default:
+            break;
+        }
+    switch ( aKey.iCode )
+        {
+        case EKeyUpArrow:
+        case EKeyDownArrow:
+        case EKeyLeftArrow:
+        case EKeyRightArrow:
+        case EKeyDevice3:
+        case EKeyEnter:
+            return ETrue;
+        default:
+            return EFalse;
+        }
+    }
+
+void CSymgramAppUi::HandleWsEventL( const TWsEvent& aEvent,
+                                    CCoeControl* aDestination )
+    {
+    const TInt type = aEvent.Type();
+    if ( iAppView &&
+         ( type == EEventKeyDown || type == EEventKey || type == EEventKeyUp ) )
+        {
+        TKeyEvent key = *aEvent.Key();
+        TUint alias = key.iCode;
+        TRAP_IGNORE( GetAliasKeyCodeL( alias, key, (TEventCode)type ) );
+        if ( alias != 0 )
+            {
+            key.iCode = alias;
+            }
+        if ( IsNaviKey( key ) || IsNaviKey( *aEvent.Key() ) )
+            {
+            if ( iAppView->OfferKeyEventL( key, (TEventCode)type ) ==
+                 EKeyWasConsumed )
+                {
+                return;
+                }
+            }
+        }
+    CAknAppUi::HandleWsEventL( aEvent, aDestination );
     }
 
 void CSymgramAppUi::ShowAboutL()

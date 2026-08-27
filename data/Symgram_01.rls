@@ -31,7 +31,10 @@ rls_string STRING_r_symgram_status_unsigned "Not signed in"
 rls_string STRING_r_symgram_signin_title "Your phone number"
 
 //d:Hint under the phone field.
-rls_string STRING_r_symgram_signin_hint "The code will arrive in Telegram or by SMS"
+rls_string STRING_r_symgram_signin_hint "Up/down: field, joystick: country list"
+
+rls_string STRING_r_symgram_field_country "Country"
+rls_string STRING_r_symgram_field_phone "Number"
 
 //d:Status after Telegram answered the first handshake packet.
 rls_string STRING_r_symgram_pq_ok "Telegram answered"

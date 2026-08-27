@@ -1,4 +1,5 @@
 #include <random.h>
+#include <e32err.h>
 
 #include "SymgramSession.h"
 #include "SymgramApi.h"
@@ -114,6 +115,7 @@ namespace
     _LIT( KStatusKey, "Ключ сессии..." );
     _LIT( KStatusCode, "Запрос кода..." );
     _LIT( KStatusPwd, "Проверка пароля..." );
+    _LIT( KStatusResume, "Переподключение..." );
     _LIT( KNeedApi, "Впишите api_id и api_hash в SymgramApi.h" );
     _LIT8( KNeedPwdErr, "SESSION_PASSWORD_NEEDED" );
     _LIT8( KBadPwdErr, "PASSWORD_HASH_INVALID" );
@@ -147,7 +149,9 @@ CSymgramSession::CSymgramSession( MSymgramSessionObserver& aObserver )
       iSrpG( 0 ),
       iSrpId( 0 ),
       iRead( NULL, 0, 0 ),
-      iHave( 0 )
+      iHave( 0 ),
+      iResume( EFalse ),
+      iResumeTries( 0 )
     {
     CActiveScheduler::Add( this );
     }
@@ -186,6 +190,7 @@ void CSymgramSession::DoCancel()
             iConn.Close();
             break;
         case EConnecting:
+        case EResuming:
         case EWriting:
         case EReading:
             iSocket.CancelAll();
@@ -220,6 +225,46 @@ void CSymgramSession::FailTextL( const TDesC& aText )
     iObserver.SessionErrorL( aText );
     }
 
+TBool CSymgramSession::CanResume( TInt aError ) const
+    {
+    if ( iPhase < 3 || iLastRpc.Length() == 0 || iResumeTries >= 3 )
+        {
+        return EFalse;
+        }
+    return aError == KErrDisconnected
+        || aError == KErrCouldNotDisconnect
+        || aError == KErrCouldNotConnect
+        || aError == KErrTimedOut
+        || aError == KErrCommsLineFail
+        || aError == KErrNotReady;
+    }
+
+void CSymgramSession::ResumeConnectL()
+    {
+    iResumeTries++;
+    Cancel();
+    CloseSocket();
+    iSentAbridged = EFalse;
+    iHave = 0;
+    iIn.Zero();
+    iSeq = 0;
+    iLastMsgId = 0;
+    TBuf8<8> sid;
+    sid.SetLength( 8 );
+    GenerateRandomBytesL( sid );
+    iSessionId = GetU64( sid.Ptr() );
+    iBusy = ETrue;
+    iResume = ETrue;
+    iObserver.SessionStatusL( KStatusResume );
+    User::LeaveIfError( iSocket.Open( iServ, KAfInet, KSockStream,
+                                      KProtocolInetTcp, iConn ) );
+    iAddr.SetAddress( KDc2 );
+    iAddr.SetPort( KDcPort );
+    iState = EResuming;
+    iSocket.Connect( iAddr, iStatus );
+    SetActive();
+    }
+
 void CSymgramSession::RpcFailL( const TDesC8& aMsg )
     {
     TBuf<64> text;
@@ -248,6 +293,8 @@ void CSymgramSession::ConnectL( const TDesC8& aPhone )
     iPhase = 0;
     iBusy = ETrue;
     iSentAbridged = EFalse;
+    iResume = EFalse;
+    iResumeTries = 0;
     iSeq = 0;
     iLastMsgId = 0;
     iTimeOffset = 0;
@@ -285,11 +332,15 @@ void CSymgramSession::SubmitCodeL( const TDesC8& aCode )
     SendSignInL();
     }
 
-void CSymgramSession::SubmitPasswordL( const TDesC8& aPassword )
+TInt CSymgramSession::SubmitPasswordL( const TDesC8& aPassword )
     {
-    if ( iBusy || iPhase != 3 || !iHaveSrp )
+    if ( iPhase != 3 || !iHaveSrp )
         {
-        return;
+        return KErrNotReady;
+        }
+    if ( iBusy )
+        {
+        return KErrInUse;
         }
     if ( IsActive() )
         {
@@ -303,7 +354,7 @@ void CSymgramSession::SubmitPasswordL( const TDesC8& aPassword )
     if ( err != KErrNone )
         {
         FailL( err );
-        return;
+        return err;
         }
 
     TBuf8<384> query;
@@ -316,13 +367,20 @@ void CSymgramSession::SubmitPasswordL( const TDesC8& aPassword )
     TBuf8<512> wrapped;
     WrapInitL( query, wrapped );
     iLastRpc.Copy( wrapped );
-    SendEncryptedL( wrapped );
+    iResumeTries = 0;
+    ResumeConnectL();
+    return KErrNone;
     }
 
 void CSymgramSession::RunL()
     {
     if ( iStatus.Int() != KErrNone )
         {
+        if ( CanResume( iStatus.Int() ) )
+            {
+            ResumeConnectL();
+            return;
+            }
         FailL( iStatus.Int() );
         return;
         }
@@ -342,8 +400,22 @@ void CSymgramSession::RunL()
             break;
             }
         case EConnecting:
-            SendPqL();
+        case EResuming:
+            {
+            TInt keep = 1;
+            iSocket.SetOpt( KSoTcpKeepAlive, KSolInetTcp, keep );
+            if ( iResume && iPhase >= 3 && iLastRpc.Length() > 0 )
+                {
+                iResume = EFalse;
+                SendEncryptedL( iLastRpc );
+                }
+            else
+                {
+                iResume = EFalse;
+                SendPqL();
+                }
             break;
+            }
         case EWriting:
             iHave = 0;
             iIn.Zero();
@@ -563,8 +635,17 @@ void CSymgramSession::HandleIncomingL()
         iHave = left;
         iIn.SetLength( iHave );
 
-        if ( iState == EWriting || iState == EIdle )
+        if ( iState == EWriting )
             {
+            return;
+            }
+        if ( iState == EIdle && iPhase < 3 )
+            {
+            return;
+            }
+        if ( iState == EIdle )
+            {
+            ReadMoreL();
             return;
             }
         }
@@ -1471,7 +1552,7 @@ void CSymgramSession::HandlePasswordL( const TUint8* aP, TInt aLen )
         }
     iSrpId = (TInt64)GetU64( q );
 
-    TBuf<40> hint;
+    TBuf<80> hint;
     if ( ( flags & 8 ) != 0 )
         {
         q += 8;
@@ -1486,6 +1567,7 @@ void CSymgramSession::HandlePasswordL( const TUint8* aP, TInt aLen )
         }
 
     iHaveSrp = ETrue;
+    iResumeTries = 0;
     iBusy = EFalse;
     iState = EIdle;
     iObserver.SessionPasswordNeededL( hint );
@@ -1739,6 +1821,7 @@ void CSymgramSession::HandleRpcResultL( const TUint8* aP, TInt aLen )
         iPhoneCodeHash.Copy( hash, hlen );
         iBusy = EFalse;
         iState = EIdle;
+        iResumeTries = 0;
         iObserver.SessionCodeSentL();
         return;
         }
@@ -1746,6 +1829,7 @@ void CSymgramSession::HandleRpcResultL( const TUint8* aP, TInt aLen )
         {
         iBusy = EFalse;
         iState = EIdle;
+        iResumeTries = 0;
         iObserver.SessionSignedInL();
         return;
         }

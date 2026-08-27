@@ -26,7 +26,7 @@ class CSymgramSession : public CActive
 
         void ConnectL( const TDesC8& aPhone );
         void SubmitCodeL( const TDesC8& aCode );
-        void SubmitPasswordL( const TDesC8& aPassword );
+        TInt SubmitPasswordL( const TDesC8& aPassword );
         TBool IsBusy() const;
 
     private:
@@ -36,7 +36,8 @@ class CSymgramSession : public CActive
             EStarting,
             EConnecting,
             EWriting,
-            EReading
+            EReading,
+            EResuming
             };
 
         CSymgramSession( MSymgramSessionObserver& aObserver );
@@ -48,6 +49,8 @@ class CSymgramSession : public CActive
 
         void FailL( TInt aError );
         void FailTextL( const TDesC& aText );
+        TBool CanResume( TInt aError ) const;
+        void ResumeConnectL();
         void RpcFailL( const TDesC8& aMsg );
         void CloseSocket();
         void SendPqL();
@@ -127,6 +130,8 @@ class CSymgramSession : public CActive
         TBuf8<4096> iIn;
         TPtr8 iRead;
         TInt iHave;
+        TBool iResume;
+        TInt iResumeTries;
     };
 
 #endif

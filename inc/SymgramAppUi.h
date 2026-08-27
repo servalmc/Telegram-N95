@@ -15,9 +15,11 @@ class CSymgramAppUi : public CAknAppUi
     private:
         void HandleCommandL( TInt aCommand );
         void HandleStatusPaneSizeChange();
+        void HandleWsEventL( const TWsEvent& aEvent, CCoeControl* aDestination );
 
     private:
         void ShowAboutL();
+        TBool IsNaviKey( const TKeyEvent& aKey ) const;
 
     private:
         CSymgramAppView* iAppView;

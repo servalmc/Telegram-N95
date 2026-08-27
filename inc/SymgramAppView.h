@@ -26,6 +26,7 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         void SetStatusL( const TDesC& aStatus );
         void NextL();
         void CycleCountry( TInt aDelta );
+        void QueryCountryL();
 
     public: // from CCoeControl
         TKeyResponse OfferKeyEventL( const TKeyEvent& aKeyEvent, TEventCode aType );
@@ -49,6 +50,8 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         void DrawHeader( CWindowGc& aGc, const TRect& aRect ) const;
         void DrawRow( CWindowGc& aGc, const TRect& aRect, TInt aIndex ) const;
         void DrawSignIn( CWindowGc& aGc, const TRect& aRect ) const;
+        void DrawSignInField( CWindowGc& aGc, const TRect& aRow, TBool aOn,
+                              const TDesC& aLeft, const TDesC& aRight ) const;
         void DrawEmptyState( CWindowGc& aGc, const TRect& aRect ) const;
         void DrawCenteredPair( CWindowGc& aGc, const TRect& aRect,
                                const HBufC* aTitle, const HBufC* aDetail ) const;
@@ -78,6 +81,8 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         HBufC* iCodeTitle;
         HBufC* iCodeHint;
         HBufC* iPasswordPrompt;
+        HBufC* iFieldCountry;
+        HBufC* iFieldPhone;
 
         CDesCArray* iCountries;
 
@@ -88,7 +93,7 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         TInt iCountry;
         TBuf<16> iPhone;
         TBuf<8> iSmsCode;
-        TBuf<40> iPwdHint;
+        TBuf<80> iPwdHint;
 
         CSymgramSession* iSession;
         CIdle* iPasswordIdle;
