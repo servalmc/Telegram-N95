@@ -4,7 +4,8 @@ Native Symbian C++ application targeting **Symbian OS 9.2 / S60 3rd Edition Feat
 
 ## Status
 
-Early setup. Repository scaffolding only; no application code yet.
+Toolchain is installed and verified end to end: sources compile with GCCE, and the resulting
+binary packages into a self-signed `.sisx` installable on a device. No application code yet.
 
 ## Build environment
 
@@ -12,24 +13,19 @@ Early setup. Repository scaffolding only; no application code yet.
 | --- | --- |
 | Platform | Symbian OS 9.2, S60 3rd Edition FP1 |
 | SDK | S60 3rd Edition FP1 SDK for Symbian OS, for C++ |
-| IDE | Carbide.c++ |
-| Compiler (device) | GCCE (`abld build gcce urel`) |
-| Compiler (emulator) | WINSCW (`abld build winscw udeb`) |
+| Compiler (device) | GCCE — GCC 3.4.3, CodeSourcery ARM Q1C 2005 |
+| Compiler (emulator) | WINSCW |
 
-## Building from the command line
+See [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md) for how it is installed and for the platform quirks
+worth knowing before touching a build.
 
-```
-cd group
-bldmake bldfiles
-abld build winscw udeb      # emulator
-abld build gcce urel        # device
-```
+## Building
 
-Packaging a signed installer:
+Run from `cmd.exe`, not PowerShell — see the toolchain notes for why.
 
 ```
-makesis <name>.pkg
-signsis <name>.sis <name>.sisx <cert>.cer <key>.key
+tools\build.bat              REM GCCE release, for the device
+tools\build.bat winscw udeb  REM emulator
 ```
 
 ## Layout
