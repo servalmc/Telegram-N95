@@ -118,7 +118,8 @@ void CSymgramAppUi::HandleWsEventL( const TWsEvent& aEvent,
             {
             key.iCode = alias;
             }
-        if ( IsNaviKey( key ) || IsNaviKey( *aEvent.Key() ) )
+        if ( !IsDisplayingMenuOrDialog() &&
+             ( IsNaviKey( key ) || IsNaviKey( *aEvent.Key() ) ) )
             {
             if ( iAppView->OfferKeyEventL( key, (TEventCode)type ) ==
                  EKeyWasConsumed )

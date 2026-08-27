@@ -38,6 +38,9 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         void SessionCodeSentL();
         void SessionPasswordNeededL( const TDesC& aHint );
         void SessionSignedInL();
+        void SessionClearChatsL();
+        void SessionAddChatL( const TDesC& aName, const TDesC& aPreview,
+                              TInt aUnread );
 
     private: // from CCoeControl
         void Draw( const TRect& aRect ) const;
@@ -50,6 +53,7 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         void DrawHeader( CWindowGc& aGc, const TRect& aRect ) const;
         void DrawRow( CWindowGc& aGc, const TRect& aRect, TInt aIndex ) const;
         void DrawSignIn( CWindowGc& aGc, const TRect& aRect ) const;
+        void DrawCountryList( CWindowGc& aGc, const TRect& aRect ) const;
         void DrawSignInField( CWindowGc& aGc, const TRect& aRow, TBool aOn,
                               const TDesC& aLeft, const TDesC& aRight ) const;
         void DrawEmptyState( CWindowGc& aGc, const TRect& aRect ) const;
@@ -66,7 +70,6 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         void QueryPasswordL();
         void HandleArrowL( TInt aDir );
         void HandleBackspace();
-        static TInt PasswordIdleCb( TAny* aPtr );
 
     private:
         const CFont* iTitleFont;
@@ -89,14 +92,15 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         TBool iSignedIn;
         TBool iAwaitingCode;
         TBool iAwaitingPassword;
+        TBool iPickingCountry;
         TInt iFocus;
         TInt iCountry;
         TBuf<16> iPhone;
         TBuf<8> iSmsCode;
+        TBuf<128> iCloudPwd;
         TBuf<80> iPwdHint;
 
         CSymgramSession* iSession;
-        CIdle* iPasswordIdle;
         TInt iNavDown;
 
         RArray<TSymgramChat> iChats;

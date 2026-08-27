@@ -16,6 +16,9 @@ class MSymgramSessionObserver
         virtual void SessionCodeSentL() = 0;
         virtual void SessionPasswordNeededL( const TDesC& aHint ) = 0;
         virtual void SessionSignedInL() = 0;
+        virtual void SessionClearChatsL() = 0;
+        virtual void SessionAddChatL( const TDesC& aName, const TDesC& aPreview,
+                                      TInt aUnread ) = 0;
     };
 
 class CSymgramSession : public CActive
@@ -58,8 +61,16 @@ class CSymgramSession : public CActive
         void SendSendCodeL();
         void SendSignInL();
         void SendGetPasswordL();
+        void SendGetDialogsL();
+        void HandleDialogsL( const TUint8* aP, TInt aLen );
         void WrapInitL( const TDesC8& aQuery, TDes8& aOut );
-        TInt ComputeSrpL( const TDesC8& aPassword, TDes8& aA, TDes8& aM1 );
+        TInt StartPbkdfL( const TDesC8& aPassword );
+        TInt FinishSrpL( TDes8& aA, TDes8& aM1 );
+        void FinishPasswordL();
+        static TInt PbkdfCb( TAny* aPtr );
+        TInt PbkdfStep();
+        void ReportPbkdfProgressL();
+        void StopPbkdf();
         void HandlePasswordL( const TUint8* aP, TInt aLen );
         void SendEncryptedL( const TDesC8& aMsg );
         void ReadMoreL();
@@ -132,6 +143,13 @@ class CSymgramSession : public CActive
         TInt iHave;
         TBool iResume;
         TInt iResumeTries;
+
+        CIdle* iPbkdfIdle;
+        TUint8 iPbkdfPass[ 32 ];
+        TUint8 iPbkdfU[ 64 ];
+        TUint8 iPbkdfT[ 64 ];
+        TInt iPbkdfN;
+        TInt iPbkdfLastPct;
     };
 
 #endif

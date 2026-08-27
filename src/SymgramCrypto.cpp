@@ -583,9 +583,9 @@ void HmacSha512( const TUint8* aKey, TInt aKeyLen,
     Sha512( outer, 192, aOut );
     }
 
-void Pbkdf2HmacSha512( const TUint8* aPass, TInt aPassLen,
-                       const TUint8* aSalt, TInt aSaltLen,
-                       TInt aIter, TUint8 aOut[ 64 ] )
+void Pbkdf2HmacSha512Begin( const TUint8* aPass, TInt aPassLen,
+                            const TUint8* aSalt, TInt aSaltLen,
+                            TUint8 aU[ 64 ], TUint8 aT[ 64 ] )
     {
     if ( aSaltLen > 256 )
         {
@@ -597,19 +597,35 @@ void Pbkdf2HmacSha512( const TUint8* aPass, TInt aPassLen,
     block[ aSaltLen + 1 ] = 0;
     block[ aSaltLen + 2 ] = 0;
     block[ aSaltLen + 3 ] = 1;
-    TUint8 u[ 64 ];
-    TUint8 t[ 64 ];
-    HmacSha512( aPass, aPassLen, block, aSaltLen + 4, u );
-    Mem::Copy( t, u, 64 );
-    TInt n = 1;
-    for ( n = 1; n < aIter; n++ )
+    HmacSha512( aPass, aPassLen, block, aSaltLen + 4, aU );
+    Mem::Copy( aT, aU, 64 );
+    }
+
+void Pbkdf2HmacSha512Rounds( const TUint8* aPass, TInt aPassLen,
+                             TUint8 aU[ 64 ], TUint8 aT[ 64 ], TInt aCount )
+    {
+    TInt n = 0;
+    for ( n = 0; n < aCount; n++ )
         {
-        HmacSha512( aPass, aPassLen, u, 64, u );
+        HmacSha512( aPass, aPassLen, aU, 64, aU );
         TInt b = 0;
         for ( b = 0; b < 64; b++ )
             {
-            t[ b ] ^= u[ b ];
+            aT[ b ] ^= aU[ b ];
             }
+        }
+    }
+
+void Pbkdf2HmacSha512( const TUint8* aPass, TInt aPassLen,
+                       const TUint8* aSalt, TInt aSaltLen,
+                       TInt aIter, TUint8 aOut[ 64 ] )
+    {
+    TUint8 u[ 64 ];
+    TUint8 t[ 64 ];
+    Pbkdf2HmacSha512Begin( aPass, aPassLen, aSalt, aSaltLen, u, t );
+    if ( aIter > 1 )
+        {
+        Pbkdf2HmacSha512Rounds( aPass, aPassLen, u, t, aIter - 1 );
         }
     Mem::Copy( aOut, t, 64 );
     }

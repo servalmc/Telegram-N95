@@ -29,6 +29,11 @@ void HmacSha512( const TUint8* aKey, TInt aKeyLen,
 void Pbkdf2HmacSha512( const TUint8* aPass, TInt aPassLen,
                        const TUint8* aSalt, TInt aSaltLen,
                        TInt aIter, TUint8 aOut[ 64 ] );
+void Pbkdf2HmacSha512Begin( const TUint8* aPass, TInt aPassLen,
+                            const TUint8* aSalt, TInt aSaltLen,
+                            TUint8 aU[ 64 ], TUint8 aT[ 64 ] );
+void Pbkdf2HmacSha512Rounds( const TUint8* aPass, TInt aPassLen,
+                             TUint8 aU[ 64 ], TUint8 aT[ 64 ], TInt aCount );
 
 void BnMulMod( TBn& aOut, const TBn& aA, const TBn& aB, const TBn& aMod );
 void BnSubMod( TBn& aOut, const TBn& aA, const TBn& aB, const TBn& aMod );

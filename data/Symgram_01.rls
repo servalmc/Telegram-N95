@@ -31,7 +31,7 @@ rls_string STRING_r_symgram_status_unsigned "Not signed in"
 rls_string STRING_r_symgram_signin_title "Your phone number"
 
 //d:Hint under the phone field.
-rls_string STRING_r_symgram_signin_hint "Up/down: field, joystick: country list"
+rls_string STRING_r_symgram_signin_hint "Center on country: list, up/down: field"
 
 rls_string STRING_r_symgram_field_country "Country"
 rls_string STRING_r_symgram_field_phone "Number"

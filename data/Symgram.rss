@@ -172,7 +172,8 @@ RESOURCE AVKON_LIST_QUERY r_symgram_country_query
                 listtype = EAknCtSinglePopupMenuListBox;
                 listbox = AVKON_LIST_QUERY_LIST
                     {
-                    flags = EAknListBoxMenuList;
+                    flags = EAknListBoxSelectionList | EAknListBoxLoopScrolling;
+                    height = 8;
                     array_id = r_symgram_countries;
                     };
                 heading = STRING_r_symgram_field_country;
