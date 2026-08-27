@@ -49,6 +49,9 @@ rls_string STRING_r_symgram_code_hint "Введите код из приложе
 //d:Prompt for Telegram cloud password (2FA).
 rls_string STRING_r_symgram_password_prompt "Облачный пароль"
 
+//d:Hint under the cloud-password field: characters are shown, not masked.
+rls_string STRING_r_symgram_password_hint "Символы видны при вводе"
+
 rls_string STRING_r_symgram_cc_ru "Россия"
 rls_string STRING_r_symgram_cc_by "Беларусь"
 rls_string STRING_r_symgram_cc_kz "Казахстан"

@@ -192,6 +192,11 @@ RESOURCE TBUF r_symgram_empty_detail
     buf = STRING_r_symgram_empty_detail;
     }
 
+RESOURCE TBUF r_symgram_password_hint
+    {
+    buf = STRING_r_symgram_password_hint;
+    }
+
 RESOURCE LOCALISABLE_APP_INFO r_symgram_localisable_app_info
     {
     short_caption = STRING_r_symgram_short_caption;

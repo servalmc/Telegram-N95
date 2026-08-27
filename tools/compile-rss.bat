@@ -63,7 +63,8 @@ echo #define R_SYMGRAM_COUNTRIES                       0x5fd70012
 echo #define R_SYMGRAM_COUNTRY_QUERY                   0x5fd70013
 echo #define R_SYMGRAM_EMPTY_TITLE                     0x5fd70014
 echo #define R_SYMGRAM_EMPTY_DETAIL                    0x5fd70015
-echo #define R_SYMGRAM_LOCALISABLE_APP_INFO            0x5fd70016
+echo #define R_SYMGRAM_PASSWORD_HINT                   0x5fd70016
+echo #define R_SYMGRAM_LOCALISABLE_APP_INFO            0x5fd70017
 ) > "%HDR%"
 if errorlevel 1 (
     echo Failed to write %HDR%

@@ -86,7 +86,7 @@ CSymgramAppView::CSymgramAppView()
     : iTitleFont( NULL ), iNameFont( NULL ), iTextFont( NULL ),
       iStatus( NULL ), iSignInTitle( NULL ), iSignInHint( NULL ),
       iEmptyTitle( NULL ), iEmptyDetail( NULL ), iCodeTitle( NULL ), iCodeHint( NULL ),
-      iPasswordPrompt( NULL ), iFieldCountry( NULL ), iFieldPhone( NULL ),
+      iPasswordPrompt( NULL ), iPasswordHint( NULL ), iFieldCountry( NULL ), iFieldPhone( NULL ),
       iCountries( NULL ), iSignedIn( EFalse ), iAwaitingCode( EFalse ),
       iAwaitingPassword( EFalse ), iPickingCountry( EFalse ), iFocus( 0 ),
       iCountry( 2 ), iSession( NULL ), iNavDown( 0 ),
@@ -107,6 +107,7 @@ CSymgramAppView::~CSymgramAppView()
     delete iCodeTitle;
     delete iCodeHint;
     delete iPasswordPrompt;
+    delete iPasswordHint;
     delete iFieldCountry;
     delete iFieldPhone;
     }
@@ -127,6 +128,7 @@ void CSymgramAppView::ConstructL( const TRect& aRect )
     iCodeTitle   = StringLoader::LoadL( R_SYMGRAM_CODE_TITLE );
     iCodeHint    = StringLoader::LoadL( R_SYMGRAM_CODE_HINT );
     iPasswordPrompt = StringLoader::LoadL( R_SYMGRAM_PASSWORD_PROMPT );
+    iPasswordHint = StringLoader::LoadL( R_SYMGRAM_PASSWORD_HINT );
     iFieldCountry = StringLoader::LoadL( R_SYMGRAM_FIELD_COUNTRY );
     iFieldPhone = StringLoader::LoadL( R_SYMGRAM_FIELD_PHONE );
 
@@ -296,6 +298,17 @@ TKeyResponse CSymgramAppView::OfferKeyEventL( const TKeyEvent& aKeyEvent,
                 {
                 iPhone.Append( (TText)aKeyEvent.iCode );
                 iFocus = 1;
+                DrawDeferred();
+                }
+            return EKeyWasConsumed;
+            }
+
+        if ( iAwaitingPassword &&
+             aKeyEvent.iCode >= 32 && aKeyEvent.iCode < 0xF800 )
+            {
+            if ( iCloudPwd.Length() < iCloudPwd.MaxLength() )
+                {
+                iCloudPwd.Append( (TText)aKeyEvent.iCode );
                 DrawDeferred();
                 }
             return EKeyWasConsumed;
@@ -731,16 +744,31 @@ void CSymgramAppView::DrawSignIn( CWindowGc& aGc, const TRect& aRect ) const
         y += nameH + 10;
         const TInt rowH = nameH + 14;
         TBuf<40> shown;
-        TInt i = 0;
-        for ( i = 0; i < iCloudPwd.Length() && shown.Length() < shown.MaxLength() - 1; i++ )
+        const TInt keep = shown.MaxLength() - 1;
+        if ( iCloudPwd.Length() > keep )
             {
-            shown.Append( '*' );
+            shown.Copy( iCloudPwd.Right( keep ) );
+            }
+        else
+            {
+            shown.Copy( iCloudPwd );
             }
         shown.Append( '_' );
         _LIT( KEmptyRight, "" );
         TRect pwdRow( aRect.iTl.iX + 6, y, aRect.iBr.iX - 6, y + rowH );
+        ClipText( shown, *iNameFont, pwdRow.Width() - 20 );
         DrawSignInField( aGc, pwdRow, ETrue, shown, KEmptyRight );
         y += rowH + 10;
+        if ( iPasswordHint )
+            {
+            aGc.UseFont( iTextFont );
+            aGc.SetPenColor( Muted() );
+            aGc.DrawText( *iPasswordHint,
+                          TRect( aRect.iTl.iX + 8, y, aRect.iBr.iX - 8, y + textH ),
+                          iTextFont->AscentInPixels(), CGraphicsContext::ELeft );
+            aGc.DiscardFont();
+            y += textH + 4;
+            }
         if ( iPwdHint.Length() > 0 )
             {
             aGc.UseFont( iTextFont );
@@ -876,6 +904,16 @@ void CSymgramAppView::QueryCountryL()
         }
     iPickingCountry = ETrue;
     DrawDeferred();
+    }
+
+TBool CSymgramAppView::ShowNextCommand() const
+    {
+    return !iSignedIn;
+    }
+
+TBool CSymgramAppView::ShowCountryCommand() const
+    {
+    return !iSignedIn && !iAwaitingCode && !iAwaitingPassword && !iPickingCountry;
     }
 
 void CSymgramAppView::NextL()

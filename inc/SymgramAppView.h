@@ -27,6 +27,8 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         void NextL();
         void CycleCountry( TInt aDelta );
         void QueryCountryL();
+        TBool ShowNextCommand() const;
+        TBool ShowCountryCommand() const;
 
     public: // from CCoeControl
         TKeyResponse OfferKeyEventL( const TKeyEvent& aKeyEvent, TEventCode aType );
@@ -84,6 +86,7 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         HBufC* iCodeTitle;
         HBufC* iCodeHint;
         HBufC* iPasswordPrompt;
+        HBufC* iPasswordHint;
         HBufC* iFieldCountry;
         HBufC* iFieldPhone;
 

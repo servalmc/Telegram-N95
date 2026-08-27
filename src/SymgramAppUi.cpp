@@ -3,6 +3,8 @@
 #include <stringloader.h>
 #include <e32keys.h>
 #include <w32std.h>
+#include <eikmenub.h>
+#include <eikmenup.h>
 #include <Symgram.rsg>
 
 #include "Symgram.hrh"
@@ -66,6 +68,17 @@ void CSymgramAppUi::HandleCommandL( TInt aCommand )
         }
     }
 
+void CSymgramAppUi::DynInitMenuPaneL( TInt aResourceId, CEikMenuPane* aMenuPane )
+    {
+    CAknAppUi::DynInitMenuPaneL( aResourceId, aMenuPane );
+    if ( aResourceId != R_SYMGRAM_MENU || !iAppView || !aMenuPane )
+        {
+        return;
+        }
+    aMenuPane->SetItemDimmed( ESymgramCmdNext, !iAppView->ShowNextCommand() );
+    aMenuPane->SetItemDimmed( ESymgramCmdCountry, !iAppView->ShowCountryCommand() );
+    }
+
 void CSymgramAppUi::HandleStatusPaneSizeChange()
     {
     CAknAppUi::HandleStatusPaneSizeChange();
@@ -108,6 +121,19 @@ void CSymgramAppUi::HandleWsEventL( const TWsEvent& aEvent,
                                     CCoeControl* aDestination )
     {
     const TInt type = aEvent.Type();
+    // Leave Options, dialogs and other Avkon panes their own joystick.
+    // Intercepting navi keys globally made the stock menu unusable.
+    if ( aDestination && aDestination != iAppView )
+        {
+        CAknAppUi::HandleWsEventL( aEvent, aDestination );
+        return;
+        }
+    CEikMenuBar* bar = MenuBar();
+    if ( IsDisplayingMenuOrDialog() || ( bar && bar->IsDisplayed() ) )
+        {
+        CAknAppUi::HandleWsEventL( aEvent, aDestination );
+        return;
+        }
     if ( iAppView &&
          ( type == EEventKeyDown || type == EEventKey || type == EEventKeyUp ) )
         {
@@ -118,8 +144,7 @@ void CSymgramAppUi::HandleWsEventL( const TWsEvent& aEvent,
             {
             key.iCode = alias;
             }
-        if ( !IsDisplayingMenuOrDialog() &&
-             ( IsNaviKey( key ) || IsNaviKey( *aEvent.Key() ) ) )
+        if ( IsNaviKey( key ) || IsNaviKey( *aEvent.Key() ) )
             {
             if ( iAppView->OfferKeyEventL( key, (TEventCode)type ) ==
                  EKeyWasConsumed )
