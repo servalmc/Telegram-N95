@@ -1,0 +1,22 @@
+// Russian (Symbian language code 16). Primary language.
+// This file is UTF-8; the .rss declares CHARACTER_SET UTF8 so rcomp reads it correctly.
+
+//d:Application caption in the phone menu.
+rls_string STRING_r_symgram_caption "Symgram"
+
+//d:Short caption, shown where space is tight.
+rls_string STRING_r_symgram_short_caption "Symgram"
+
+//d:Options menu, opens the about note.
+rls_string STRING_r_symgram_menu_about "О программе"
+
+//d:Options menu, closes the application.
+rls_string STRING_r_symgram_menu_exit "Выход"
+
+//d:Body of the about note, shown under the name and version.
+rls_string STRING_r_symgram_about_text "Клиент Telegram для Symbian 9.2"
+
+//d:Connection status shown when there is no session.
+rls_string STRING_r_symgram_status_offline "Нет соединения"
+
+rls_string STRING_r_symgram_loc_resource_file "\\resource\\apps\\Symgram"

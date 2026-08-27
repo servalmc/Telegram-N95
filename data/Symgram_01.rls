@@ -1,0 +1,21 @@
+// UK English (Symbian language code 01). Secondary language.
+
+//d:Application caption in the phone menu.
+rls_string STRING_r_symgram_caption "Symgram"
+
+//d:Short caption, shown where space is tight.
+rls_string STRING_r_symgram_short_caption "Symgram"
+
+//d:Options menu, opens the about note.
+rls_string STRING_r_symgram_menu_about "About"
+
+//d:Options menu, closes the application.
+rls_string STRING_r_symgram_menu_exit "Exit"
+
+//d:Body of the about note, shown under the name and version.
+rls_string STRING_r_symgram_about_text "Telegram client for Symbian 9.2"
+
+//d:Connection status shown when there is no session.
+rls_string STRING_r_symgram_status_offline "Not connected"
+
+rls_string STRING_r_symgram_loc_resource_file "\\resource\\apps\\Symgram"

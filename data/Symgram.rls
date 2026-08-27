@@ -1,0 +1,12 @@
+// Language dispatcher. Symbian language code 16 is Russian, 01 is UK English.
+// The default (SC) variant maps to Russian, which is the project's primary language.
+
+#ifdef LANGUAGE_SC
+#include "Symgram_16.rls"
+#elif defined LANGUAGE_16
+#include "Symgram_16.rls"
+#elif defined LANGUAGE_01
+#include "Symgram_01.rls"
+#else
+#include "Symgram_16.rls"
+#endif
