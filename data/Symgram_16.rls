@@ -43,6 +43,9 @@ rls_string STRING_r_symgram_code_title "Код из Telegram"
 //d:Hint under the code field.
 rls_string STRING_r_symgram_code_hint "Введите код из приложения или SMS"
 
+//d:Prompt for Telegram cloud password (2FA).
+rls_string STRING_r_symgram_password_prompt "Облачный пароль"
+
 rls_string STRING_r_symgram_cc_ru "Россия"
 rls_string STRING_r_symgram_cc_by "Беларусь"
 rls_string STRING_r_symgram_cc_kz "Казахстан"

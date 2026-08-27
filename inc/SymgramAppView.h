@@ -2,6 +2,7 @@
 #define __SYMGRAMAPPVIEW_H__
 
 #include <coecntrl.h>
+#include <e32base.h>
 #include <badesca.h>
 #include "SymgramSession.h"
 
@@ -34,6 +35,7 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         void SessionFailedL( TInt aError );
         void SessionErrorL( const TDesC& aText );
         void SessionCodeSentL();
+        void SessionPasswordNeededL( const TDesC& aHint );
         void SessionSignedInL();
 
     private: // from CCoeControl
@@ -58,6 +60,10 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         void EnsureSelectionVisible();
         void CountryName( TDes& aOut ) const;
         TInt CallingCode() const;
+        void QueryPasswordL();
+        void HandleArrowL( TInt aDir );
+        void HandleBackspace();
+        static TInt PasswordIdleCb( TAny* aPtr );
 
     private:
         const CFont* iTitleFont;
@@ -71,17 +77,22 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         HBufC* iEmptyDetail;
         HBufC* iCodeTitle;
         HBufC* iCodeHint;
+        HBufC* iPasswordPrompt;
 
         CDesCArray* iCountries;
 
         TBool iSignedIn;
         TBool iAwaitingCode;
+        TBool iAwaitingPassword;
         TInt iFocus;
         TInt iCountry;
         TBuf<16> iPhone;
         TBuf<8> iSmsCode;
+        TBuf<40> iPwdHint;
 
         CSymgramSession* iSession;
+        CIdle* iPasswordIdle;
+        TInt iNavDown;
 
         RArray<TSymgramChat> iChats;
         TInt iSelected;

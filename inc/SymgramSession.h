@@ -14,6 +14,7 @@ class MSymgramSessionObserver
         virtual void SessionFailedL( TInt aError ) = 0;
         virtual void SessionErrorL( const TDesC& aText ) = 0;
         virtual void SessionCodeSentL() = 0;
+        virtual void SessionPasswordNeededL( const TDesC& aHint ) = 0;
         virtual void SessionSignedInL() = 0;
     };
 
@@ -25,6 +26,7 @@ class CSymgramSession : public CActive
 
         void ConnectL( const TDesC8& aPhone );
         void SubmitCodeL( const TDesC8& aCode );
+        void SubmitPasswordL( const TDesC8& aPassword );
         TBool IsBusy() const;
 
     private:
@@ -45,12 +47,17 @@ class CSymgramSession : public CActive
         TInt RunError( TInt aError );
 
         void FailL( TInt aError );
+        void FailTextL( const TDesC& aText );
         void RpcFailL( const TDesC8& aMsg );
         void CloseSocket();
         void SendPqL();
         void SendDhParamsL();
         void SendSendCodeL();
         void SendSignInL();
+        void SendGetPasswordL();
+        void WrapInitL( const TDesC8& aQuery, TDes8& aOut );
+        TInt ComputeSrpL( const TDesC8& aPassword, TDes8& aA, TDes8& aM1 );
+        void HandlePasswordL( const TUint8* aP, TInt aLen );
         void SendEncryptedL( const TDesC8& aMsg );
         void ReadMoreL();
         void HandleIncomingL();
@@ -61,6 +68,7 @@ class CSymgramSession : public CActive
         void HandleServerDhL( const TUint8* aBody, TInt aLen );
         void HandleDhGenL( const TUint8* aBody, TInt aLen );
         void HandleRpcResultL( const TUint8* aP, TInt aLen );
+        HBufC8* UnzipPackedLC( const TUint8* aObj, TInt aLen );
         TInt SkipSentCodeType( const TUint8* aP, TInt aRemain, TInt& aSkip );
         TInt RsaPad( const TDesC8& aData, TDes8& aOut );
         void BuildUnencryptedL( const TDesC8& aBody, TDes8& aOut );
@@ -107,6 +115,13 @@ class CSymgramSession : public CActive
         TBuf8<64> iPhoneCodeHash;
         TBuf8<16> iCode;
         TBuf8<512> iLastRpc;
+        TBool iHaveSrp;
+        TUint32 iSrpG;
+        TInt64 iSrpId;
+        TBuf8<256> iSalt1;
+        TBuf8<256> iSalt2;
+        TBuf8<256> iSrpP;
+        TBuf8<256> iSrpB;
 
         TBuf8<2048> iOut;
         TBuf8<4096> iIn;

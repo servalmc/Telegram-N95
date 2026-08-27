@@ -41,6 +41,22 @@ namespace
         aP[ 3 ] = (TUint8)aV;
         }
 
+    inline TUint64 GetBe64( const TUint8* aP )
+        {
+        return ( (TUint64)GetBe32( aP ) << 32 ) | GetBe32( aP + 4 );
+        }
+
+    inline void PutBe64( TUint8* aP, TUint64 aV )
+        {
+        PutBe32( aP, (TUint32)( aV >> 32 ) );
+        PutBe32( aP + 4, (TUint32)aV );
+        }
+
+    inline TUint64 Rotr64( TUint64 aX, TInt aN )
+        {
+        return ( aX >> aN ) | ( aX << ( 64 - aN ) );
+        }
+
     const TUint32 KSha256K[ 64 ] =
         {
         0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
@@ -432,6 +448,172 @@ void Sha1( const TUint8* aData, TInt aLen, TUint8 aOut[ 20 ] )
     PutBe32( aOut + 16, h4 );
     }
 
+void Sha512( const TUint8* aData, TInt aLen, TUint8 aOut[ 64 ] )
+    {
+    static const TUint64 K[ 80 ] =
+        {
+        0x428a2f98d728ae22ull,0x7137449123ef65cdull,0xb5c0fbcfec4d3b2full,0xe9b5dba58189dbbcull,
+        0x3956c25bf348b538ull,0x59f111f1b605d019ull,0x923f82a4af194f9bull,0xab1c5ed5da6d8118ull,
+        0xd807aa98a3030242ull,0x12835b0145706fbeull,0x243185be4ee4b28cull,0x550c7dc3d5ffb4e2ull,
+        0x72be5d74f27b896full,0x80deb1fe3b1696b1ull,0x9bdc06a725c71235ull,0xc19bf174cf692694ull,
+        0xe49b69c19ef14ad2ull,0xefbe4786384f25e3ull,0x0fc19dc68b8cd5b5ull,0x240ca1cc77ac9c65ull,
+        0x2de92c6f592b0275ull,0x4a7484aa6ea6e483ull,0x5cb0a9dcbd41fbd4ull,0x76f988da831153b5ull,
+        0x983e5152ee66dfabull,0xa831c66d2db43210ull,0xb00327c898fb213full,0xbf597fc7beef0ee4ull,
+        0xc6e00bf33da88fc2ull,0xd5a79147930aa725ull,0x06ca6351e003826full,0x142929670a0e6e70ull,
+        0x27b70a8546d22ffcull,0x2e1b21385c26c926ull,0x4d2c6dfc5ac42aedull,0x53380d139d95b3dfull,
+        0x650a73548baf63deull,0x766a0abb3c77b2a8ull,0x81c2c92e47edaee6ull,0x92722c851482353bull,
+        0xa2bfe8a14cf10364ull,0xa81a664bbc423001ull,0xc24b8b70d0f89791ull,0xc76c51a30654be30ull,
+        0xd192e819d6ef5218ull,0xd69906245565a910ull,0xf40e35855771202aull,0x106aa07032bbd1b8ull,
+        0x19a4c116b8d2d0c8ull,0x1e376c085141ab53ull,0x2748774cdf8eeb99ull,0x34b0bcb5e19b48a8ull,
+        0x391c0cb3c5c95a63ull,0x4ed8aa4ae3418acbull,0x5b9cca4f7763e373ull,0x682e6ff3d6b2b8a3ull,
+        0x748f82ee5defb2fcull,0x78a5636f43172f60ull,0x84c87814a1f0ab72ull,0x8cc702081a6439ecull,
+        0x90befffa23631e28ull,0xa4506cebde82bde9ull,0xbef9a3f7b2c67915ull,0xc67178f2e372532bull,
+        0xca273eceea26619cull,0xd186b8c721c0c207ull,0xeada7dd6cde0eb1eull,0xf57d4f7fee6ed178ull,
+        0x06f067aa72176fbaull,0x0a637dc5a2c898a6ull,0x113f9804bef90daeull,0x1b710b35131c471bull,
+        0x28db77f523047d84ull,0x32caab7b40c72493ull,0x3c9ebe0a15c9bebcull,0x431d67c49c100d4cull,
+        0x4cc5d4becb3e42b6ull,0x597f299cfc657e2aull,0x5fcb6fab3ad6faecull,0x6c44198c4a475817ull
+        };
+
+    TUint64 h[ 8 ];
+    h[ 0 ] = 0x6a09e667f3bcc908ull;
+    h[ 1 ] = 0xbb67ae8584caa73bull;
+    h[ 2 ] = 0x3c6ef372fe94f82bull;
+    h[ 3 ] = 0xa54ff53a5f1d36f1ull;
+    h[ 4 ] = 0x510e527fade682d1ull;
+    h[ 5 ] = 0x9b05688c2b3e6c1full;
+    h[ 6 ] = 0x1f83d9abfb41bd6bull;
+    h[ 7 ] = 0x5be0cd19137e2179ull;
+
+    TInt zeros = ( 112 - ( ( aLen + 1 ) % 128 ) + 128 ) % 128;
+    const TInt total = aLen + 1 + zeros + 16;
+
+    TUint64 w[ 80 ];
+    for ( TInt off = 0; off < total; off += 128 )
+        {
+        TUint8 block[ 128 ];
+        for ( TInt i = 0; i < 128; i++ )
+            {
+            const TInt idx = off + i;
+            if ( idx < aLen )
+                {
+                block[ i ] = aData[ idx ];
+                }
+            else if ( idx == aLen )
+                {
+                block[ i ] = 0x80;
+                }
+            else if ( idx < total - 16 )
+                {
+                block[ i ] = 0;
+                }
+            else
+                {
+                const TUint64 bits = (TUint64)aLen << 3;
+                block[ i ] = (TUint8)( bits >> ( 8 * ( total - 1 - idx ) ) );
+                }
+            }
+        for ( TInt i = 0; i < 16; i++ )
+            {
+            w[ i ] = GetBe64( block + 8 * i );
+            }
+        for ( TInt i = 16; i < 80; i++ )
+            {
+            const TUint64 s0 = Rotr64( w[ i - 15 ], 1 ) ^ Rotr64( w[ i - 15 ], 8 ) ^ ( w[ i - 15 ] >> 7 );
+            const TUint64 s1 = Rotr64( w[ i - 2 ], 19 ) ^ Rotr64( w[ i - 2 ], 61 ) ^ ( w[ i - 2 ] >> 6 );
+            w[ i ] = w[ i - 16 ] + s0 + w[ i - 7 ] + s1;
+            }
+        TUint64 a = h[ 0 ], b = h[ 1 ], c = h[ 2 ], d = h[ 3 ];
+        TUint64 e = h[ 4 ], f = h[ 5 ], g = h[ 6 ], hh = h[ 7 ];
+        for ( TInt i = 0; i < 80; i++ )
+            {
+            const TUint64 S1 = Rotr64( e, 14 ) ^ Rotr64( e, 18 ) ^ Rotr64( e, 41 );
+            const TUint64 ch = ( e & f ) ^ ( ( ~e ) & g );
+            const TUint64 t1 = hh + S1 + ch + K[ i ] + w[ i ];
+            const TUint64 S0 = Rotr64( a, 28 ) ^ Rotr64( a, 34 ) ^ Rotr64( a, 39 );
+            const TUint64 maj = ( a & b ) ^ ( a & c ) ^ ( b & c );
+            const TUint64 t2 = S0 + maj;
+            hh = g; g = f; f = e; e = d + t1;
+            d = c; c = b; b = a; a = t1 + t2;
+            }
+        h[ 0 ] += a; h[ 1 ] += b; h[ 2 ] += c; h[ 3 ] += d;
+        h[ 4 ] += e; h[ 5 ] += f; h[ 6 ] += g; h[ 7 ] += hh;
+        }
+    for ( TInt i = 0; i < 8; i++ )
+        {
+        PutBe64( aOut + 8 * i, h[ i ] );
+        }
+    }
+
+void HmacSha512( const TUint8* aKey, TInt aKeyLen,
+                 const TUint8* aData, TInt aLen, TUint8 aOut[ 64 ] )
+    {
+    TUint8 key[ 128 ];
+    Mem::FillZ( key, 128 );
+    if ( aKeyLen > 128 )
+        {
+        Sha512( aKey, aKeyLen, key );
+        }
+    else if ( aKeyLen > 0 )
+        {
+        Mem::Copy( key, aKey, aKeyLen );
+        }
+    TUint8 ipad[ 128 ];
+    TUint8 opad[ 128 ];
+    TInt i = 0;
+    for ( i = 0; i < 128; i++ )
+        {
+        ipad[ i ] = (TUint8)( key[ i ] ^ 0x36 );
+        opad[ i ] = (TUint8)( key[ i ] ^ 0x5c );
+        }
+    TUint8 inner[ 512 ];
+    Mem::Copy( inner, ipad, 128 );
+    if ( aLen > 384 )
+        {
+        aLen = 384;
+        }
+    if ( aLen > 0 )
+        {
+        Mem::Copy( inner + 128, aData, aLen );
+        }
+    TUint8 innerHash[ 64 ];
+    Sha512( inner, 128 + aLen, innerHash );
+    TUint8 outer[ 192 ];
+    Mem::Copy( outer, opad, 128 );
+    Mem::Copy( outer + 128, innerHash, 64 );
+    Sha512( outer, 192, aOut );
+    }
+
+void Pbkdf2HmacSha512( const TUint8* aPass, TInt aPassLen,
+                       const TUint8* aSalt, TInt aSaltLen,
+                       TInt aIter, TUint8 aOut[ 64 ] )
+    {
+    if ( aSaltLen > 256 )
+        {
+        aSaltLen = 256;
+        }
+    TUint8 block[ 260 ];
+    Mem::Copy( block, aSalt, aSaltLen );
+    block[ aSaltLen ] = 0;
+    block[ aSaltLen + 1 ] = 0;
+    block[ aSaltLen + 2 ] = 0;
+    block[ aSaltLen + 3 ] = 1;
+    TUint8 u[ 64 ];
+    TUint8 t[ 64 ];
+    HmacSha512( aPass, aPassLen, block, aSaltLen + 4, u );
+    Mem::Copy( t, u, 64 );
+    TInt n = 1;
+    for ( n = 1; n < aIter; n++ )
+        {
+        HmacSha512( aPass, aPassLen, u, 64, u );
+        TInt b = 0;
+        for ( b = 0; b < 64; b++ )
+            {
+            t[ b ] ^= u[ b ];
+            }
+        }
+    Mem::Copy( aOut, t, 64 );
+    }
+
 void Aes256IgeEncrypt( const TUint8* aIn, TUint8* aOut, TInt aLen,
                        const TUint8 aKey[ 32 ], const TUint8 aIv[ 32 ] )
     {
@@ -658,6 +840,12 @@ namespace
 
 void BnModExp( TBn& aOut, const TBn& aBase, const TBn& aExp, const TBn& aMod )
     {
+    BnModExpN( aOut, aBase, aExp.iD, KBnLimbs, aMod );
+    }
+
+void BnModExpN( TBn& aOut, const TBn& aBase,
+                const TUint32* aExp, TInt aExpLimbs, const TBn& aMod )
+    {
     const TUint32 n0inv = MontInv32( aMod.iD[ 0 ] );
     TBn baseM, acc, one;
     ToMont( baseM, aBase, aMod, n0inv );
@@ -665,14 +853,16 @@ void BnModExp( TBn& aOut, const TBn& aBase, const TBn& aExp, const TBn& aMod )
     one.iD[ 0 ] = 1;
     ToMont( acc, one, aMod, n0inv );
 
-    for ( TInt i = KBnLimbs - 1; i >= 0; i-- )
+    TInt i = 0;
+    for ( i = aExpLimbs - 1; i >= 0; i-- )
         {
-        for ( TInt b = 31; b >= 0; b-- )
+        TInt b = 0;
+        for ( b = 31; b >= 0; b-- )
             {
             TBn sq;
             MontMul( sq, acc, acc, aMod, n0inv );
             acc = sq;
-            if ( aExp.iD[ i ] & ( 1u << b ) )
+            if ( aExp[ i ] & ( 1u << b ) )
                 {
                 TBn m;
                 MontMul( m, acc, baseM, aMod, n0inv );
@@ -685,6 +875,52 @@ void BnModExp( TBn& aOut, const TBn& aBase, const TBn& aExp, const TBn& aMod )
     ident.Zero();
     ident.iD[ 0 ] = 1;
     MontMul( aOut, acc, ident, aMod, n0inv );
+    }
+
+void BnMulMod( TBn& aOut, const TBn& aA, const TBn& aB, const TBn& aMod )
+    {
+    const TUint32 n0inv = MontInv32( aMod.iD[ 0 ] );
+    TBn am, bm, prod, ident;
+    ToMont( am, aA, aMod, n0inv );
+    ToMont( bm, aB, aMod, n0inv );
+    MontMul( prod, am, bm, aMod, n0inv );
+    ident.Zero();
+    ident.iD[ 0 ] = 1;
+    MontMul( aOut, prod, ident, aMod, n0inv );
+    }
+
+void BnSubMod( TBn& aOut, const TBn& aA, const TBn& aB, const TBn& aMod )
+    {
+    if ( aA.Cmp( aB ) >= 0 )
+        {
+        TUint32 br = 0;
+        TInt i = 0;
+        for ( i = 0; i < KBnLimbs; i++ )
+            {
+            const TUint64 yy = (TUint64)aB.iD[ i ] + br;
+            br = ( aA.iD[ i ] < yy ) ? 1 : 0;
+            aOut.iD[ i ] = aA.iD[ i ] - (TUint32)yy;
+            }
+        }
+    else
+        {
+        TUint32 c = 0;
+        TInt i = 0;
+        TBn sum;
+        for ( i = 0; i < KBnLimbs; i++ )
+            {
+            const TUint64 s = (TUint64)aA.iD[ i ] + aMod.iD[ i ] + c;
+            sum.iD[ i ] = (TUint32)s;
+            c = (TUint32)( s >> 32 );
+            }
+        TUint32 br = 0;
+        for ( i = 0; i < KBnLimbs; i++ )
+            {
+            const TUint64 yy = (TUint64)aB.iD[ i ] + br;
+            br = ( sum.iD[ i ] < yy ) ? 1 : 0;
+            aOut.iD[ i ] = sum.iD[ i ] - (TUint32)yy;
+            }
+        }
     }
 
 void BnRsaPublic( TUint8 aOut[ 256 ], const TUint8 aIn[ 256 ],

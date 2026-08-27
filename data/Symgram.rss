@@ -100,6 +100,36 @@ RESOURCE TBUF r_symgram_code_hint
     buf = STRING_r_symgram_code_hint;
     }
 
+RESOURCE TBUF r_symgram_password_prompt
+    {
+    buf = STRING_r_symgram_password_prompt;
+    }
+
+RESOURCE DIALOG r_symgram_password_query
+    {
+    flags = EGeneralQueryFlags;
+    buttons = R_AVKON_SOFTKEYS_OK_CANCEL;
+    items =
+        {
+        DLG_LINE
+            {
+            type = EAknCtQuery;
+            id = EGeneralQuery;
+            control = AVKON_DATA_QUERY
+                {
+                layout = EDataLayout;
+                label = STRING_r_symgram_password_prompt;
+                control = EDWIN
+                    {
+                    width = 25;
+                    maxlength = 64;
+                    lines = 1;
+                    };
+                };
+            }
+        };
+    }
+
 RESOURCE ARRAY r_symgram_countries
     {
     items =

@@ -1,9 +1,11 @@
 #include <coemain.h>
 #include <eikenv.h>
+#include <e32keys.h>
 #include <badesca.h>
 #include <aknutils.h>
 #include <stringloader.h>
 #include <aknnotewrappers.h>
+#include <aknquerydialog.h>
 #include <Symgram.rsg>
 
 #include "SymgramVersion.h"
@@ -84,14 +86,18 @@ CSymgramAppView::CSymgramAppView()
     : iTitleFont( NULL ), iNameFont( NULL ), iTextFont( NULL ),
       iStatus( NULL ), iSignInTitle( NULL ), iSignInHint( NULL ),
       iEmptyTitle( NULL ), iEmptyDetail( NULL ), iCodeTitle( NULL ), iCodeHint( NULL ),
-      iCountries( NULL ), iSignedIn( EFalse ), iAwaitingCode( EFalse ), iFocus( 1 ), iCountry( 0 ),
-      iSession( NULL ), iSelected( 0 ), iTopRow( 0 )
+      iPasswordPrompt( NULL ),
+      iCountries( NULL ), iSignedIn( EFalse ), iAwaitingCode( EFalse ),
+      iAwaitingPassword( EFalse ), iFocus( 1 ), iCountry( 0 ),
+      iSession( NULL ), iPasswordIdle( NULL ), iNavDown( 0 ),
+      iSelected( 0 ), iTopRow( 0 )
     {
     }
 
 CSymgramAppView::~CSymgramAppView()
     {
     iChats.Close();
+    delete iPasswordIdle;
     delete iSession;
     delete iCountries;
     delete iStatus;
@@ -101,6 +107,7 @@ CSymgramAppView::~CSymgramAppView()
     delete iEmptyDetail;
     delete iCodeTitle;
     delete iCodeHint;
+    delete iPasswordPrompt;
     }
 
 void CSymgramAppView::ConstructL( const TRect& aRect )
@@ -118,11 +125,14 @@ void CSymgramAppView::ConstructL( const TRect& aRect )
     iEmptyDetail = StringLoader::LoadL( R_SYMGRAM_EMPTY_DETAIL );
     iCodeTitle   = StringLoader::LoadL( R_SYMGRAM_CODE_TITLE );
     iCodeHint    = StringLoader::LoadL( R_SYMGRAM_CODE_HINT );
+    iPasswordPrompt = StringLoader::LoadL( R_SYMGRAM_PASSWORD_PROMPT );
 
     iCountries = CEikonEnv::Static()->ReadDesCArrayResourceL( R_SYMGRAM_COUNTRIES );
     iSession = CSymgramSession::NewL( *this );
 
     SetRect( aRect );
+    SetFocusing( ETrue );
+    SetFocus( ETrue );
     ActivateL();
     }
 
@@ -186,9 +196,78 @@ void CSymgramAppView::EnsureSelectionVisible()
 TKeyResponse CSymgramAppView::OfferKeyEventL( const TKeyEvent& aKeyEvent,
                                               TEventCode aType )
     {
+    TInt dir = 0;
+    if ( aKeyEvent.iScanCode == EStdKeyUpArrow )
+        {
+        dir = 1;
+        }
+    else if ( aKeyEvent.iScanCode == EStdKeyDownArrow )
+        {
+        dir = 2;
+        }
+    else if ( aKeyEvent.iScanCode == EStdKeyLeftArrow )
+        {
+        dir = 3;
+        }
+    else if ( aKeyEvent.iScanCode == EStdKeyRightArrow )
+        {
+        dir = 4;
+        }
+    else if ( aKeyEvent.iCode == EKeyUpArrow )
+        {
+        dir = 1;
+        }
+    else if ( aKeyEvent.iCode == EKeyDownArrow )
+        {
+        dir = 2;
+        }
+    else if ( aKeyEvent.iCode == EKeyLeftArrow )
+        {
+        dir = 3;
+        }
+    else if ( aKeyEvent.iCode == EKeyRightArrow )
+        {
+        dir = 4;
+        }
+
+    if ( aType == EEventKeyDown )
+        {
+        if ( dir )
+            {
+            iNavDown = dir;
+            HandleArrowL( dir );
+            return EKeyWasConsumed;
+            }
+        if ( aKeyEvent.iScanCode == EStdKeyDevice3 ||
+             aKeyEvent.iScanCode == EStdKeyEnter )
+            {
+            if ( !iSignedIn )
+                {
+                NextL();
+                return EKeyWasConsumed;
+                }
+            }
+        return EKeyWasNotConsumed;
+        }
+
+    if ( aType == EEventKeyUp )
+        {
+        iNavDown = 0;
+        return EKeyWasNotConsumed;
+        }
+
     if ( aType != EEventKey )
         {
         return EKeyWasNotConsumed;
+        }
+
+    if ( dir )
+        {
+        if ( iNavDown != dir )
+            {
+            HandleArrowL( dir );
+            }
+        return EKeyWasConsumed;
         }
 
     if ( !iSignedIn )
@@ -216,49 +295,7 @@ TKeyResponse CSymgramAppView::OfferKeyEventL( const TKeyEvent& aKeyEvent,
             {
             case EKeyBackspace:
             case EKeyDelete:
-                if ( iAwaitingCode )
-                    {
-                    if ( iSmsCode.Length() > 0 )
-                        {
-                        iSmsCode.SetLength( iSmsCode.Length() - 1 );
-                        DrawDeferred();
-                        }
-                    }
-                else if ( iPhone.Length() > 0 )
-                    {
-                    iPhone.SetLength( iPhone.Length() - 1 );
-                    DrawDeferred();
-                    }
-                return EKeyWasConsumed;
-
-            case EKeyUpArrow:
-                if ( !iAwaitingCode )
-                    {
-                    iFocus = 0;
-                    DrawDeferred();
-                    }
-                return EKeyWasConsumed;
-
-            case EKeyDownArrow:
-                if ( !iAwaitingCode )
-                    {
-                    iFocus = 1;
-                    DrawDeferred();
-                    }
-                return EKeyWasConsumed;
-
-            case EKeyLeftArrow:
-                if ( !iAwaitingCode )
-                    {
-                    CycleCountry( -1 );
-                    }
-                return EKeyWasConsumed;
-
-            case EKeyRightArrow:
-                if ( !iAwaitingCode )
-                    {
-                    CycleCountry( 1 );
-                    }
+                HandleBackspace();
                 return EKeyWasConsumed;
 
             case EKeyDevice3:
@@ -271,34 +308,78 @@ TKeyResponse CSymgramAppView::OfferKeyEventL( const TKeyEvent& aKeyEvent,
             }
         }
 
+    return EKeyWasNotConsumed;
+    }
+
+void CSymgramAppView::HandleArrowL( TInt aDir )
+    {
+    if ( !iSignedIn )
+        {
+        if ( iAwaitingCode )
+            {
+            return;
+            }
+        if ( aDir == 1 )
+            {
+            iFocus = 0;
+            DrawDeferred();
+            }
+        else if ( aDir == 2 )
+            {
+            iFocus = 1;
+            DrawDeferred();
+            }
+        else if ( aDir == 3 )
+            {
+            CycleCountry( -1 );
+            }
+        else if ( aDir == 4 )
+            {
+            CycleCountry( 1 );
+            }
+        return;
+        }
+
     if ( iChats.Count() == 0 )
         {
-        return EKeyWasNotConsumed;
+        return;
         }
-
-    switch ( aKeyEvent.iCode )
+    if ( aDir == 1 && iSelected > 0 )
         {
-        case EKeyUpArrow:
-            if ( iSelected > 0 )
-                {
-                iSelected--;
-                EnsureSelectionVisible();
-                DrawDeferred();
-                }
-            return EKeyWasConsumed;
-
-        case EKeyDownArrow:
-            if ( iSelected < iChats.Count() - 1 )
-                {
-                iSelected++;
-                EnsureSelectionVisible();
-                DrawDeferred();
-                }
-            return EKeyWasConsumed;
-
-        default:
-            return EKeyWasNotConsumed;
+        iSelected--;
+        EnsureSelectionVisible();
+        DrawDeferred();
         }
+    else if ( aDir == 2 && iSelected < iChats.Count() - 1 )
+        {
+        iSelected++;
+        EnsureSelectionVisible();
+        DrawDeferred();
+        }
+    }
+
+void CSymgramAppView::HandleBackspace()
+    {
+    if ( iAwaitingCode )
+        {
+        if ( iSmsCode.Length() > 0 )
+            {
+            iSmsCode.SetLength( iSmsCode.Length() - 1 );
+            DrawDeferred();
+            }
+        }
+    else if ( iPhone.Length() > 0 )
+        {
+        iPhone.SetLength( iPhone.Length() - 1 );
+        DrawDeferred();
+        }
+    }
+
+TInt CSymgramAppView::PasswordIdleCb( TAny* aPtr )
+    {
+    CSymgramAppView* self = static_cast<CSymgramAppView*>( aPtr );
+    TRAP_IGNORE( self->QueryPasswordL() );
+    return 0;
     }
 
 void CSymgramAppView::Draw( const TRect& /*aRect*/ ) const
@@ -655,6 +736,15 @@ void CSymgramAppView::NextL()
         {
         return;
         }
+    if ( iAwaitingPassword )
+        {
+        if ( iPasswordIdle && iPasswordIdle->IsActive() )
+            {
+            iPasswordIdle->Cancel();
+            }
+        QueryPasswordL();
+        return;
+        }
     if ( iAwaitingCode )
         {
         if ( iSmsCode.Length() < 4 )
@@ -690,6 +780,66 @@ void CSymgramAppView::NextL()
     iSession->ConnectL( phone );
     }
 
+void CSymgramAppView::QueryPasswordL()
+    {
+    TBuf<64> pwd;
+    CAknTextQueryDialog* dlg = CAknTextQueryDialog::NewL( pwd );
+    CleanupStack::PushL( dlg );
+    if ( iPwdHint.Length() > 0 )
+        {
+        dlg->SetPromptL( iPwdHint );
+        }
+    else if ( iPasswordPrompt )
+        {
+        dlg->SetPromptL( *iPasswordPrompt );
+        }
+    dlg->SetMaxLength( 64 );
+    CleanupStack::Pop( dlg );
+    TBool ok = EFalse;
+    TInt qerr = KErrNone;
+    TRAP( qerr, ok = dlg->ExecuteLD( R_SYMGRAM_PASSWORD_QUERY ) );
+    if ( qerr != KErrNone )
+        {
+        TBuf<40> text;
+        _LIT( KDlg, "Диалог пароля " );
+        text.Copy( KDlg );
+        text.AppendNum( qerr );
+        SetStatusL( text );
+        return;
+        }
+    if ( !ok )
+        {
+        return;
+        }
+    TBuf8<192> utf;
+    TInt i = 0;
+    for ( i = 0; i < pwd.Length(); i++ )
+        {
+        const TUint c = pwd[ i ];
+        if ( c < 0x80 )
+            {
+            utf.Append( (TUint8)c );
+            }
+        else if ( c < 0x800 )
+            {
+            utf.Append( (TUint8)( 0xC0 | ( c >> 6 ) ) );
+            utf.Append( (TUint8)( 0x80 | ( c & 0x3F ) ) );
+            }
+        else
+            {
+            utf.Append( (TUint8)( 0xE0 | ( c >> 12 ) ) );
+            utf.Append( (TUint8)( 0x80 | ( ( c >> 6 ) & 0x3F ) ) );
+            utf.Append( (TUint8)( 0x80 | ( c & 0x3F ) ) );
+            }
+        }
+    pwd.FillZ();
+    _LIT( KWait, "Проверка пароля..." );
+    SetStatusL( KWait );
+    DrawNow();
+    iSession->SubmitPasswordL( utf );
+    utf.FillZ();
+    }
+
 void CSymgramAppView::SessionStatusL( const TDesC& aText )
     {
     SetStatusL( aText );
@@ -722,10 +872,27 @@ void CSymgramAppView::SessionCodeSentL()
     SetStatusL( KWait );
     }
 
+void CSymgramAppView::SessionPasswordNeededL( const TDesC& aHint )
+    {
+    iAwaitingPassword = ETrue;
+    iPwdHint.Copy( aHint.Left( iPwdHint.MaxLength() ) );
+    _LIT( KWait, "Облачный пароль" );
+    SetStatusL( KWait );
+    if ( !iPasswordIdle )
+        {
+        iPasswordIdle = CIdle::NewL( CActive::EPriorityHigh );
+        }
+    if ( !iPasswordIdle->IsActive() )
+        {
+        iPasswordIdle->Start( TCallBack( PasswordIdleCb, this ) );
+        }
+    }
+
 void CSymgramAppView::SessionSignedInL()
     {
     iSignedIn = ETrue;
     iAwaitingCode = EFalse;
+    iAwaitingPassword = EFalse;
     _LIT( KOn, "В сети" );
     SetStatusL( KOn );
     }

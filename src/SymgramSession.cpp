@@ -30,6 +30,13 @@ namespace
     const TUint32 KGzipPacked = 0x3072cfa1u;
     const TUint32 KAuthOk = 0x2ea2c0d4u;
     const TUint32 KAuthOkOld = 0xcd050916u;
+    const TUint32 KGetPassword = 0x548a30f5u;
+    const TUint32 KAccountPwd = 0x957b50fbu;
+    const TUint32 KAccountPwdOld = 0x185b184fu;
+    const TUint32 KAccountPwdSrp = 0xad2641f8u;
+    const TUint32 KKdfAlgo = 0x3a912d4au;
+    const TUint32 KCheckPassword = 0xd18b4d16u;
+    const TUint32 KInputSrp = 0xd27ff082u;
     const TInt KDcId = 2;
     const TInt KLayer = 158;
 
@@ -83,6 +90,17 @@ namespace
             }
         }
 
+    void PadBe( TUint8* aDst, TInt aDstLen, const TUint8* aSrc, TInt aSrcLen )
+        {
+        Mem::FillZ( aDst, aDstLen );
+        if ( aSrcLen > aDstLen )
+            {
+            aSrc += aSrcLen - aDstLen;
+            aSrcLen = aDstLen;
+            }
+        Mem::Copy( aDst + aDstLen - aSrcLen, aSrc, aSrcLen );
+        }
+
     _LIT8( KDevice, "Nokia N95 8GB" );
     _LIT8( KSystem, "Symbian OS 9.2" );
     _LIT8( KAppVer, "0.1.0" );
@@ -95,7 +113,11 @@ namespace
     _LIT( KStatusWait, "Ответ Telegram..." );
     _LIT( KStatusKey, "Ключ сессии..." );
     _LIT( KStatusCode, "Запрос кода..." );
+    _LIT( KStatusPwd, "Проверка пароля..." );
     _LIT( KNeedApi, "Впишите api_id и api_hash в SymgramApi.h" );
+    _LIT8( KNeedPwdErr, "SESSION_PASSWORD_NEEDED" );
+    _LIT8( KBadPwdErr, "PASSWORD_HASH_INVALID" );
+    _LIT8( KSrpIdErr, "SRP_ID_INVALID" );
     }
 
 CSymgramSession* CSymgramSession::NewL( MSymgramSessionObserver& aObserver )
@@ -121,6 +143,9 @@ CSymgramSession::CSymgramSession( MSymgramSessionObserver& aObserver )
       iSeq( 0 ),
       iTimeOffset( 0 ),
       iPhase( 0 ),
+      iHaveSrp( EFalse ),
+      iSrpG( 0 ),
+      iSrpId( 0 ),
       iRead( NULL, 0, 0 ),
       iHave( 0 )
     {
@@ -187,6 +212,14 @@ void CSymgramSession::FailL( TInt aError )
     iObserver.SessionFailedL( aError );
     }
 
+void CSymgramSession::FailTextL( const TDesC& aText )
+    {
+    CloseSocket();
+    iState = EIdle;
+    iBusy = EFalse;
+    iObserver.SessionErrorL( aText );
+    }
+
 void CSymgramSession::RpcFailL( const TDesC8& aMsg )
     {
     TBuf<64> text;
@@ -222,6 +255,7 @@ void CSymgramSession::ConnectL( const TDesC8& aPhone )
     iOut.Zero();
     iPhone.Copy( aPhone );
     iPhoneCodeHash.Zero();
+    iHaveSrp = EFalse;
 
     User::LeaveIfError( iConn.Open( iServ ) );
 
@@ -249,6 +283,40 @@ void CSymgramSession::SubmitCodeL( const TDesC8& aCode )
     iBusy = ETrue;
     iLastRpc.Zero();
     SendSignInL();
+    }
+
+void CSymgramSession::SubmitPasswordL( const TDesC8& aPassword )
+    {
+    if ( iBusy || iPhase != 3 || !iHaveSrp )
+        {
+        return;
+        }
+    if ( IsActive() )
+        {
+        Cancel();
+        }
+    iBusy = ETrue;
+    iObserver.SessionStatusL( KStatusPwd );
+    TBuf8<256> A;
+    TBuf8<32> M1;
+    TInt err = ComputeSrpL( aPassword, A, M1 );
+    if ( err != KErrNone )
+        {
+        FailL( err );
+        return;
+        }
+
+    TBuf8<384> query;
+    PutU32( query, KCheckPassword );
+    PutU32( query, KInputSrp );
+    PutU64( query, (TUint64)iSrpId );
+    TlAppendBytes( query, A.Ptr(), A.Length() );
+    TlAppendBytes( query, M1.Ptr(), M1.Length() );
+
+    TBuf8<512> wrapped;
+    WrapInitL( query, wrapped );
+    iLastRpc.Copy( wrapped );
+    SendEncryptedL( wrapped );
     }
 
 void CSymgramSession::RunL()
@@ -279,7 +347,11 @@ void CSymgramSession::RunL()
         case EWriting:
             iHave = 0;
             iIn.Zero();
-            if ( iPhoneCodeHash.Length() )
+            if ( iHaveSrp )
+                {
+                iObserver.SessionStatusL( KStatusPwd );
+                }
+            else if ( iPhoneCodeHash.Length() )
                 {
                 iObserver.SessionStatusL( KStatusWait );
                 }
@@ -1089,6 +1161,336 @@ void CSymgramSession::SendSignInL()
     SendEncryptedL( wrapped );
     }
 
+void CSymgramSession::WrapInitL( const TDesC8& aQuery, TDes8& aOut )
+    {
+    aOut.Zero();
+    PutU32( aOut, KInvokeWithLayer );
+    PutU32( aOut, KLayer );
+    PutU32( aOut, KInitConnection );
+    PutU32( aOut, 0 );
+    PutU32( aOut, (TUint32)KSymgramApiId );
+    TlAppendBytes( aOut, KDevice().Ptr(), KDevice().Length() );
+    TlAppendBytes( aOut, KSystem().Ptr(), KSystem().Length() );
+    TlAppendBytes( aOut, KAppVer().Ptr(), KAppVer().Length() );
+    TlAppendBytes( aOut, KLang().Ptr(), KLang().Length() );
+    TlAppendBytes( aOut, KLangPack().Ptr(), KLangPack().Length() );
+    TlAppendBytes( aOut, KLang().Ptr(), KLang().Length() );
+    aOut.Append( aQuery );
+    }
+
+void CSymgramSession::SendGetPasswordL()
+    {
+    TBuf8<8> query;
+    PutU32( query, KGetPassword );
+    TBuf8<384> wrapped;
+    WrapInitL( query, wrapped );
+    iLastRpc.Copy( wrapped );
+    iObserver.SessionStatusL( KStatusPwd );
+    SendEncryptedL( wrapped );
+    }
+
+TInt CSymgramSession::ComputeSrpL( const TDesC8& aPassword, TDes8& aA, TDes8& aM1 )
+    {
+    const TInt pLen = iSrpP.Length();
+    if ( pLen < 64 || pLen > 256 || iSrpB.Length() < 1 )
+        {
+        return KErrCorrupt;
+        }
+
+    TUint8 cat[ 900 ];
+    TInt n = 0;
+    Mem::Copy( cat + n, iSalt1.Ptr(), iSalt1.Length() );
+    n += iSalt1.Length();
+    Mem::Copy( cat + n, aPassword.Ptr(), aPassword.Length() );
+    n += aPassword.Length();
+    Mem::Copy( cat + n, iSalt1.Ptr(), iSalt1.Length() );
+    n += iSalt1.Length();
+    TUint8 hash1[ 32 ];
+    Sha256( cat, n, hash1 );
+
+    n = 0;
+    Mem::Copy( cat + n, iSalt2.Ptr(), iSalt2.Length() );
+    n += iSalt2.Length();
+    Mem::Copy( cat + n, hash1, 32 );
+    n += 32;
+    Mem::Copy( cat + n, iSalt2.Ptr(), iSalt2.Length() );
+    n += iSalt2.Length();
+    TUint8 hash2[ 32 ];
+    Sha256( cat, n, hash2 );
+
+    TUint8 hash3[ 64 ];
+    Pbkdf2HmacSha512( hash2, 32, iSalt1.Ptr(), iSalt1.Length(), 100000, hash3 );
+
+    n = 0;
+    Mem::Copy( cat + n, iSalt2.Ptr(), iSalt2.Length() );
+    n += iSalt2.Length();
+    Mem::Copy( cat + n, hash3, 64 );
+    n += 64;
+    Mem::Copy( cat + n, iSalt2.Ptr(), iSalt2.Length() );
+    n += iSalt2.Length();
+    TUint8 xbytes[ 32 ];
+    Sha256( cat, n, xbytes );
+
+    TBn p, g, x, gx, kbn, B, A, a, u, kgx, base, S;
+    p.FromBe( iSrpP.Ptr(), pLen );
+    g.Zero();
+    g.iD[ 0 ] = iSrpG;
+    x.FromBe( xbytes, 32 );
+    BnModExp( gx, g, x, p );
+
+    TUint8 gp[ 256 ];
+    g.ToBe( gp, pLen );
+    TUint8 pg[ 512 ];
+    Mem::Copy( pg, iSrpP.Ptr(), pLen );
+    Mem::Copy( pg + pLen, gp, pLen );
+    TUint8 kbytes[ 32 ];
+    Sha256( pg, pLen * 2, kbytes );
+    kbn.FromBe( kbytes, 32 );
+
+    TUint8 abytes[ 256 ];
+    TPtr8 abuf( abytes, 256, 256 );
+    abuf.SetLength( 256 );
+    TRAPD( err, GenerateRandomBytesL( abuf ) );
+    if ( err != KErrNone )
+        {
+        return err;
+        }
+    a.FromBe( abytes, 256 );
+    BnModExp( A, g, a, p );
+
+    TBn one;
+    one.Zero();
+    one.iD[ 0 ] = 1;
+    if ( A.IsZero() || A.Cmp( one ) <= 0 || A.Cmp( p ) >= 0 )
+        {
+        return KErrCorrupt;
+        }
+
+    TUint8 Ap[ 256 ];
+    TUint8 Bp[ 256 ];
+    A.ToBe( Ap, pLen );
+    PadBe( Bp, pLen, iSrpB.Ptr(), iSrpB.Length() );
+    TUint8 au[ 512 ];
+    Mem::Copy( au, Ap, pLen );
+    Mem::Copy( au + pLen, Bp, pLen );
+    TUint8 ubytes[ 32 ];
+    Sha256( au, pLen * 2, ubytes );
+    u.FromBe( ubytes, 32 );
+    if ( u.IsZero() )
+        {
+        return KErrCorrupt;
+        }
+
+    B.FromBe( iSrpB.Ptr(), iSrpB.Length() );
+    if ( B.IsZero() || B.Cmp( one ) <= 0 || B.Cmp( p ) >= 0 )
+        {
+        return KErrCorrupt;
+        }
+
+    BnMulMod( kgx, kbn, gx, p );
+    BnSubMod( base, B, kgx, p );
+
+    TUint32 ux[ 16 ];
+    TInt i = 0;
+    for ( i = 0; i < 16; i++ )
+        {
+        ux[ i ] = 0;
+        }
+    TInt ii = 0;
+    for ( ii = 0; ii < 8; ii++ )
+        {
+        TUint64 c = 0;
+        TInt jj = 0;
+        for ( jj = 0; jj < 8; jj++ )
+            {
+            c += (TUint64)ux[ ii + jj ] + (TUint64)u.iD[ ii ] * x.iD[ jj ];
+            ux[ ii + jj ] = (TUint32)c;
+            c >>= 32;
+            }
+        ux[ ii + 8 ] += (TUint32)c;
+        }
+
+    TUint32 exp[ 80 ];
+    for ( i = 0; i < 80; i++ )
+        {
+        exp[ i ] = ( i < KBnLimbs ) ? a.iD[ i ] : 0;
+        }
+    TUint64 carry = 0;
+    for ( i = 0; i < 16; i++ )
+        {
+        carry += (TUint64)exp[ i ] + ux[ i ];
+        exp[ i ] = (TUint32)carry;
+        carry >>= 32;
+        }
+    for ( i = 16; i < 80 && carry; i++ )
+        {
+        carry += exp[ i ];
+        exp[ i ] = (TUint32)carry;
+        carry >>= 32;
+        }
+
+    BnModExpN( S, base, exp, 80, p );
+
+    TUint8 Sp[ 256 ];
+    S.ToBe( Sp, pLen );
+    TUint8 Khash[ 32 ];
+    Sha256( Sp, pLen, Khash );
+
+    TUint8 hp[ 32 ];
+    TUint8 hg[ 32 ];
+    Sha256( iSrpP.Ptr(), pLen, hp );
+    Sha256( gp, pLen, hg );
+    TUint8 xh[ 32 ];
+    for ( i = 0; i < 32; i++ )
+        {
+        xh[ i ] = (TUint8)( hp[ i ] ^ hg[ i ] );
+        }
+    TUint8 hs1[ 32 ];
+    TUint8 hs2[ 32 ];
+    Sha256( iSalt1.Ptr(), iSalt1.Length(), hs1 );
+    Sha256( iSalt2.Ptr(), iSalt2.Length(), hs2 );
+
+    TUint8 m1in[ 640 ];
+    n = 0;
+    Mem::Copy( m1in + n, xh, 32 );
+    n += 32;
+    Mem::Copy( m1in + n, hs1, 32 );
+    n += 32;
+    Mem::Copy( m1in + n, hs2, 32 );
+    n += 32;
+    Mem::Copy( m1in + n, Ap, pLen );
+    n += pLen;
+    Mem::Copy( m1in + n, Bp, pLen );
+    n += pLen;
+    Mem::Copy( m1in + n, Khash, 32 );
+    n += 32;
+    TUint8 m1[ 32 ];
+    Sha256( m1in, n, m1 );
+
+    aA.Zero();
+    TInt off = 0;
+    while ( off < pLen - 1 && Ap[ off ] == 0 )
+        {
+        off++;
+        }
+    aA.Append( Ap + off, pLen - off );
+    aM1.Zero();
+    aM1.Append( m1, 32 );
+    return KErrNone;
+    }
+
+void CSymgramSession::HandlePasswordL( const TUint8* aP, TInt aLen )
+    {
+    if ( aLen < 12 )
+        {
+        FailL( KErrCorrupt );
+        return;
+        }
+    const TUint32 flags = GetU32( aP + 4 );
+    if ( ( flags & 4 ) == 0 )
+        {
+        _LIT( KNoPwd, "Нет облачного пароля" );
+        FailTextL( KNoPwd );
+        return;
+        }
+    const TUint8* q = aP + 8;
+    TInt left = aLen - 8;
+    if ( left < 4 )
+        {
+        FailL( KErrCorrupt );
+        return;
+        }
+    const TUint32 algo = GetU32( q );
+    if ( algo != KKdfAlgo )
+        {
+        TBuf<48> text;
+        _LIT( KAlgo, "Алгоритм " );
+        text.Copy( KAlgo );
+        text.AppendNum( (TInt64)algo, EHex );
+        FailTextL( text );
+        return;
+        }
+    q += 4;
+    left -= 4;
+    const TUint8* s1 = NULL;
+    TInt n1 = 0;
+    TInt skip = TlReadBytes( q, left, s1, n1 );
+    if ( skip < 0 || n1 < 1 || n1 > iSalt1.MaxLength() )
+        {
+        FailL( KErrCorrupt );
+        return;
+        }
+    iSalt1.Copy( s1, n1 );
+    q += skip;
+    left -= skip;
+    const TUint8* s2 = NULL;
+    TInt n2 = 0;
+    skip = TlReadBytes( q, left, s2, n2 );
+    if ( skip < 0 || n2 < 1 || n2 > iSalt2.MaxLength() )
+        {
+        FailL( KErrCorrupt );
+        return;
+        }
+    iSalt2.Copy( s2, n2 );
+    q += skip;
+    left -= skip;
+    if ( left < 4 )
+        {
+        FailL( KErrCorrupt );
+        return;
+        }
+    iSrpG = GetU32( q );
+    q += 4;
+    left -= 4;
+    const TUint8* pp = NULL;
+    TInt np = 0;
+    skip = TlReadBytes( q, left, pp, np );
+    if ( skip < 0 || np < 64 || np > iSrpP.MaxLength() )
+        {
+        FailL( KErrCorrupt );
+        return;
+        }
+    iSrpP.Copy( pp, np );
+    q += skip;
+    left -= skip;
+    const TUint8* bb = NULL;
+    TInt nb = 0;
+    skip = TlReadBytes( q, left, bb, nb );
+    if ( skip < 0 || nb < 1 || nb > iSrpB.MaxLength() )
+        {
+        FailL( KErrCorrupt );
+        return;
+        }
+    iSrpB.Copy( bb, nb );
+    q += skip;
+    left -= skip;
+    if ( left < 8 )
+        {
+        FailL( KErrCorrupt );
+        return;
+        }
+    iSrpId = (TInt64)GetU64( q );
+
+    TBuf<40> hint;
+    if ( ( flags & 8 ) != 0 )
+        {
+        q += 8;
+        left -= 8;
+        const TUint8* hs = NULL;
+        TInt hn = 0;
+        if ( left > 0 && TlReadBytes( q, left, hs, hn ) >= 0 && hn > 0 )
+            {
+            TPtrC8 h8( hs, hn );
+            ToUnicode( h8, hint );
+            }
+        }
+
+    iHaveSrp = ETrue;
+    iBusy = EFalse;
+    iState = EIdle;
+    iObserver.SessionPasswordNeededL( hint );
+    }
+
 void CSymgramSession::HandleEncryptedL( const TUint8* aPacket, TInt aLen )
     {
     if ( aLen < 24 + 16 )
@@ -1194,7 +1596,13 @@ void CSymgramSession::DispatchInnerL( const TUint8* aP, TInt aLen )
         }
     if ( c == KGzipPacked )
         {
-        FailL( KErrNotSupported );
+        HBufC8* raw = UnzipPackedLC( aP, aLen );
+        if ( !raw )
+            {
+            return;
+            }
+        DispatchInnerL( raw->Ptr(), raw->Length() );
+        CleanupStack::PopAndDestroy( raw );
         return;
         }
     if ( c == KNewSession )
@@ -1224,6 +1632,31 @@ void CSymgramSession::DispatchInnerL( const TUint8* aP, TInt aLen )
         }
     }
 
+HBufC8* CSymgramSession::UnzipPackedLC( const TUint8* aObj, TInt aLen )
+    {
+    const TUint8* packed = NULL;
+    TInt plen = 0;
+    if ( aLen < 5 || TlReadBytes( aObj + 4, aLen - 4, packed, plen ) < 0 )
+        {
+        FailL( KErrCorrupt );
+        return NULL;
+        }
+    HBufC8* raw = HBufC8::NewLC( 16384 );
+    TPtr8 rp = raw->Des();
+    rp.SetLength( 16384 );
+    TInt n = 0;
+    if ( InflateTlGzip( packed, plen, const_cast<TUint8*>( rp.Ptr() ),
+                        16384, n ) != KErrNone || n < 4 )
+        {
+        CleanupStack::PopAndDestroy( raw );
+        _LIT( KGz, "Сжатый ответ" );
+        FailTextL( KGz );
+        return NULL;
+        }
+    rp.SetLength( n );
+    return raw;
+    }
+
 void CSymgramSession::HandleRpcResultL( const TUint8* aP, TInt aLen )
     {
     if ( aLen < 12 )
@@ -1241,7 +1674,17 @@ void CSymgramSession::HandleRpcResultL( const TUint8* aP, TInt aLen )
     const TUint32 c = GetU32( p );
     if ( c == KGzipPacked )
         {
-        FailL( KErrNotSupported );
+        HBufC8* raw = UnzipPackedLC( p, n );
+        if ( !raw )
+            {
+            return;
+            }
+        HBufC8* wrap = HBufC8::NewLC( 8 + raw->Length() );
+        TPtr8 wp = wrap->Des();
+        wp.FillZ( 8 );
+        wp.Append( *raw );
+        HandleRpcResultL( wp.Ptr(), wp.Length() );
+        CleanupStack::PopAndDestroy( 2, raw );
         return;
         }
     if ( c == KRpcError )
@@ -1259,6 +1702,16 @@ void CSymgramSession::HandleRpcResultL( const TUint8* aP, TInt aLen )
             return;
             }
         TPtrC8 text( msg, mlen );
+        if ( text == KNeedPwdErr )
+            {
+            SendGetPasswordL();
+            return;
+            }
+        if ( text == KSrpIdErr )
+            {
+            SendGetPasswordL();
+            return;
+            }
         RpcFailL( text );
         return;
         }
@@ -1296,7 +1749,16 @@ void CSymgramSession::HandleRpcResultL( const TUint8* aP, TInt aLen )
         iObserver.SessionSignedInL();
         return;
         }
-    FailL( KErrNotSupported );
+    if ( c == KAccountPwd || c == KAccountPwdOld || c == KAccountPwdSrp )
+        {
+        HandlePasswordL( p, n );
+        return;
+        }
+    TBuf<48> text;
+    _LIT( KUnk, "Ответ " );
+    text.Copy( KUnk );
+    text.AppendNum( (TInt64)c, EHex );
+    FailTextL( text );
     }
 
 TInt CSymgramSession::SkipSentCodeType( const TUint8* aP, TInt aRemain, TInt& aSkip )

@@ -23,6 +23,7 @@ SOURCE            SymgramAppUi.cpp
 SOURCE            SymgramAppView.cpp
 SOURCE            SymgramSession.cpp
 SOURCE            SymgramCrypto.cpp
+SOURCE            SymgramInflate.cpp
 
 USERINCLUDE       ..\inc
 SYSTEMINCLUDE     \epoc32\include
