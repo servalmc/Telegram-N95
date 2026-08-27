@@ -21,11 +21,11 @@ rls_string STRING_r_symgram_status_offline "Not connected"
 //d:Header status while the user is not signed in.
 rls_string STRING_r_symgram_status_unsigned "Not signed in"
 
-//d:Title of the sign-in screen. Shown until there is a Telegram session.
-rls_string STRING_r_symgram_signin_title "Sign in to Telegram"
+//d:Title while unsigned: there is no login function at all.
+rls_string STRING_r_symgram_signin_title "No sign-in"
 
-//d:Explanation that sign-in does not exist yet.
-rls_string STRING_r_symgram_signin_detail "Sign-in is not implemented yet"
+//d:Explanation that phone, code and session do not exist.
+rls_string STRING_r_symgram_signin_detail "No number, code or session"
 
 //d:Shown in place of the chat list after sign-in, while it is empty.
 rls_string STRING_r_symgram_empty_title "No chats"

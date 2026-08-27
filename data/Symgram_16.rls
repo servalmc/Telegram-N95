@@ -22,11 +22,11 @@ rls_string STRING_r_symgram_status_offline "Нет соединения"
 //d:Header status while the user is not signed in.
 rls_string STRING_r_symgram_status_unsigned "Нет входа"
 
-//d:Title of the sign-in screen. Shown until there is a Telegram session.
-rls_string STRING_r_symgram_signin_title "Вход в Telegram"
+//d:Title while unsigned: there is no login function at all.
+rls_string STRING_r_symgram_signin_title "Функции входа нет"
 
-//d:Explanation that sign-in does not exist yet.
-rls_string STRING_r_symgram_signin_detail "Авторизация ещё не реализована"
+//d:Explanation that phone, code and session do not exist.
+rls_string STRING_r_symgram_signin_detail "Нет номера, кода и сессии"
 
 //d:Shown in place of the chat list after sign-in, while it is empty.
 rls_string STRING_r_symgram_empty_title "Чатов нет"

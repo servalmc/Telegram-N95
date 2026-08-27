@@ -6,7 +6,7 @@
 #
 # Two modes:
 #   default   layout study, populated from tools\mock-chats.txt
-#   -Empty    what the application actually shows today: the unsigned-in screen
+#   -Empty    what the application actually shows today: no sign-in function
 #
 # The mock chats deliberately live outside the application resources: shipping
 # them would make the build look like a working client.
