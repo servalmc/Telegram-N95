@@ -4,8 +4,13 @@ Native Symbian C++ application targeting **Symbian OS 9.2 / S60 3rd Edition Feat
 
 ## Status
 
-Toolchain is installed and verified end to end: sources compile with GCCE, and the resulting
-binary packages into a self-signed `.sisx` installable on a device. No application code yet.
+Runnable application skeleton: an AVKON GUI app that starts, shows a status line and an Options
+menu, and builds all the way to a self-signed `.sisx` installable on a device. None of the
+Telegram protocol is implemented yet.
+
+The application UID is `0xE0A11E95`, taken from the unprotected range so the package can be
+self-signed. Requested capabilities are `NetworkServices`, `ReadUserData`, `WriteUserData` and
+`UserEnvironment` — all user-grantable, which keeps self-signing viable.
 
 ## Build environment
 
@@ -26,7 +31,11 @@ Run from `cmd.exe`, not PowerShell — see the toolchain notes for why.
 ```
 tools\build.bat              REM GCCE release, for the device
 tools\build.bat winscw udeb  REM emulator
+tools\package.bat            REM sis\TelegramN95.sisx, self-signed
 ```
+
+`package.bat` generates a self-signing certificate on first run and reuses it afterwards; the
+certificate and key stay out of version control.
 
 ## Layout
 

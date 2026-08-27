@@ -1,0 +1,62 @@
+NAME TN95
+
+#include <eikon.rh>
+#include <avkon.rh>
+#include <avkon.rsg>
+#include <appinfo.rh>
+#include "TelegramN95.hrh"
+
+RESOURCE RSS_SIGNATURE
+    {
+    }
+
+RESOURCE TBUF r_default_document_name
+    {
+    buf = "TN95";
+    }
+
+RESOURCE EIK_APP_INFO
+    {
+    menubar = r_telegramn95_menubar;
+    cba = R_AVKON_SOFTKEYS_OPTIONS_EXIT;
+    }
+
+RESOURCE MENU_BAR r_telegramn95_menubar
+    {
+    titles =
+        {
+        MENU_TITLE { menu_pane = r_telegramn95_menu; }
+        };
+    }
+
+RESOURCE MENU_PANE r_telegramn95_menu
+    {
+    items =
+        {
+        MENU_ITEM
+            {
+            command = ETelegramN95CmdAbout;
+            txt = "About";
+            },
+        MENU_ITEM
+            {
+            command = EAknSoftkeyExit;
+            txt = "Exit";
+            }
+        };
+    }
+
+RESOURCE TBUF r_telegramn95_about_text
+    {
+    buf = "Telegram-N95\nSymbian OS 9.2 / S60 3rd Edition FP1";
+    }
+
+RESOURCE LOCALISABLE_APP_INFO r_telegramn95_localisable_app_info
+    {
+    short_caption = "Telegram";
+    caption_and_icon =
+        CAPTION_AND_ICON_INFO
+            {
+            caption = "Telegram-N95";
+            };
+    }

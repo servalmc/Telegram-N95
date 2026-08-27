@@ -27,6 +27,11 @@ abld.bat
 *.SIS
 *.SISX
 
+# Self-signing credentials and makekeys entropy pool
+*.key
+*.cer
+.rnd
+
 # Local build output
 build/
 epoc32/

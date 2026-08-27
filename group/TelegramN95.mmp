@@ -1,0 +1,51 @@
+TARGET            TelegramN95.exe
+TARGETTYPE        exe
+
+// 0x100039CE is the standard UID2 for a GUI application.
+// UID3 sits in the unprotected 0xE0000000-0xEFFFFFFF range so the package
+// can be self-signed without a Symbian Signed certificate.
+UID               0x100039CE 0xE0A11E95
+SECUREID          0xE0A11E95
+
+EPOCSTACKSIZE     0x5000
+EPOCHEAPSIZE      0x020000 0x800000
+
+// All of these are user-grantable, which keeps self-signing possible.
+CAPABILITY        NetworkServices ReadUserData WriteUserData UserEnvironment
+VENDORID          0
+
+SOURCEPATH        ..\src
+SOURCE            TelegramN95.cpp
+SOURCE            TelegramN95Application.cpp
+SOURCE            TelegramN95Document.cpp
+SOURCE            TelegramN95AppUi.cpp
+SOURCE            TelegramN95AppView.cpp
+
+USERINCLUDE       ..\inc
+SYSTEMINCLUDE     \epoc32\include
+
+SOURCEPATH        ..\data
+
+START RESOURCE    TelegramN95.rss
+HEADER
+TARGETPATH        resource\apps
+END
+
+START RESOURCE    TelegramN95_reg.rss
+#ifdef WINSCW
+TARGETPATH        \private\10003a3f\apps
+#else
+TARGETPATH        \private\10003a3f\import\apps
+#endif
+END
+
+LIBRARY           euser.lib
+LIBRARY           apparc.lib
+LIBRARY           cone.lib
+LIBRARY           eikcore.lib
+LIBRARY           eikcoctl.lib
+LIBRARY           eikdlg.lib
+LIBRARY           avkon.lib
+LIBRARY           commonengine.lib
+LIBRARY           efsrv.lib
+LIBRARY           estor.lib

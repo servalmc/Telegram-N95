@@ -68,5 +68,9 @@ standalone it exits 0 and silently produces nothing, so `mifconv` then fails wit
 compiles and links normally. `mifconv` itself is fine and handles BMP sources, which need an
 accompanying `<name>_mask_soft.bmp` mask.
 
+**`makesis` does not expand `$(EPOCROOT)`** in this SDK — that came with later tooling. Package
+paths are therefore written from the drive root, e.g.
+`\Symbian\9.2\S60_3rd_FP1\epoc32\release\gcce\urel\...`, which also resolves through the junction.
+
 **The emulator is untested.** WINSCW needs a 32-bit Java 5 for its preferences dialogs and is
 known to be unreliable on modern Windows. Device builds via GCCE are unaffected.
