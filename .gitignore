@@ -1,0 +1,44 @@
+# --- Symbian build artifacts ---
+ABLD.BAT
+abld.bat
+*.UID.CPP
+*.uid.cpp
+*.o
+*.lib
+*.dso
+*.sym
+*.map
+*.in
+*.d
+*.make
+*.dep
+
+# Generated from .rss / .mbm / .svg sources
+*.rsg
+*.rsc
+*.r0*
+*.mbg
+*.mbm
+*.mif
+
+# Packaged installers
+*.sis
+*.sisx
+*.SIS
+*.SISX
+
+# Local build output
+build/
+epoc32/
+
+# --- Carbide.c++ / Eclipse ---
+.metadata/
+.settings/
+*.launch
+*.cproject_backup
+bin/
+
+# --- Windows ---
+Thumbs.db
+Desktop.ini
+*~
