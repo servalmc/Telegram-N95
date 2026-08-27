@@ -1,6 +1,4 @@
 #include <coemain.h>
-#include <eikenv.h>
-#include <badesca.h>
 #include <aknutils.h>
 #include <stringloader.h>
 #include <Symgram.rsg>
@@ -79,7 +77,8 @@ CSymgramAppView* CSymgramAppView::NewLC( const TRect& aRect )
 
 CSymgramAppView::CSymgramAppView()
     : iTitleFont( NULL ), iNameFont( NULL ), iTextFont( NULL ),
-      iStatus( NULL ), iEmptyHint( NULL ), iSelected( 0 ), iTopRow( 0 )
+      iStatus( NULL ), iEmptyTitle( NULL ), iEmptyDetail( NULL ),
+      iSelected( 0 ), iTopRow( 0 )
     {
     }
 
@@ -87,7 +86,8 @@ CSymgramAppView::~CSymgramAppView()
     {
     iChats.Close();
     delete iStatus;
-    delete iEmptyHint;
+    delete iEmptyTitle;
+    delete iEmptyDetail;
     }
 
 void CSymgramAppView::ConstructL( const TRect& aRect )
@@ -98,71 +98,12 @@ void CSymgramAppView::ConstructL( const TRect& aRect )
     iNameFont  = AknLayoutUtils::FontFromId( EAknLogicalFontPrimaryFont );
     iTextFont  = AknLayoutUtils::FontFromId( EAknLogicalFontSecondaryFont );
 
-    iStatus    = StringLoader::LoadL( R_SYMGRAM_STATUS_OFFLINE );
-    iEmptyHint = StringLoader::LoadL( R_SYMGRAM_EMPTY_HINT );
-
-    LoadChatsL();
+    iStatus      = StringLoader::LoadL( R_SYMGRAM_STATUS_OFFLINE );
+    iEmptyTitle  = StringLoader::LoadL( R_SYMGRAM_EMPTY_TITLE );
+    iEmptyDetail = StringLoader::LoadL( R_SYMGRAM_EMPTY_DETAIL );
 
     SetRect( aRect );
     ActivateL();
-    }
-
-void CSymgramAppView::LoadChatsL()
-    {
-    CDesCArray* rows =
-        CEikonEnv::Static()->ReadDesCArrayResourceL( R_SYMGRAM_DEMO_CHATS );
-    CleanupStack::PushL( rows );
-
-    const TInt count = rows->Count();
-    for ( TInt i = 0; i < count; i++ )
-        {
-        const TPtrC line = ( *rows )[ i ];
-
-        TSymgramChat chat;
-        chat.iUnread = 0;
-
-        TInt field = 0;
-        TInt start = 0;
-        for ( TInt pos = 0; pos <= line.Length(); pos++ )
-            {
-            if ( pos != line.Length() && line[ pos ] != '|' )
-                {
-                continue;
-                }
-
-            const TPtrC part = line.Mid( start, pos - start );
-            switch ( field )
-                {
-                case 0:
-                    chat.iName.Copy( part.Left( chat.iName.MaxLength() ) );
-                    break;
-                case 1:
-                    chat.iPreview.Copy( part.Left( chat.iPreview.MaxLength() ) );
-                    break;
-                case 2:
-                    chat.iTime.Copy( part.Left( chat.iTime.MaxLength() ) );
-                    break;
-                case 3:
-                    {
-                    TLex lex( part );
-                    if ( lex.Val( chat.iUnread ) != KErrNone )
-                        {
-                        chat.iUnread = 0;
-                        }
-                    }
-                    break;
-                default:
-                    break;
-                }
-
-            field++;
-            start = pos + 1;
-            }
-
-        iChats.AppendL( chat );
-        }
-
-    CleanupStack::PopAndDestroy( rows );
     }
 
 void CSymgramAppView::SetStatusL( const TDesC& aStatus )
@@ -455,18 +396,38 @@ void CSymgramAppView::DrawRow( CWindowGc& aGc, const TRect& aRect,
 
 void CSymgramAppView::DrawEmptyState( CWindowGc& aGc, const TRect& aRect ) const
     {
-    if ( !iTextFont || !iEmptyHint )
+    if ( !iNameFont || !iTextFont )
         {
         return;
         }
 
-    aGc.UseFont( iTextFont );
+    const TInt titleH  = iNameFont->HeightInPixels();
+    const TInt detailH = iTextFont->HeightInPixels();
+    const TInt top = aRect.iTl.iY + ( aRect.Height() - titleH - detailH - 6 ) / 2;
+
     aGc.SetPenStyle( CGraphicsContext::ESolidPen );
-    aGc.SetPenColor( Muted() );
     aGc.SetBrushStyle( CGraphicsContext::ENullBrush );
-    aGc.DrawText( *iEmptyHint, aRect, aRect.Height() / 2,
-                  CGraphicsContext::ECenter );
-    aGc.DiscardFont();
+
+    if ( iEmptyTitle )
+        {
+        aGc.UseFont( iNameFont );
+        aGc.SetPenColor( Ink() );
+        aGc.DrawText( *iEmptyTitle,
+                      TRect( aRect.iTl.iX, top, aRect.iBr.iX, top + titleH ),
+                      iNameFont->AscentInPixels(), CGraphicsContext::ECenter );
+        aGc.DiscardFont();
+        }
+
+    if ( iEmptyDetail )
+        {
+        aGc.UseFont( iTextFont );
+        aGc.SetPenColor( Muted() );
+        aGc.DrawText( *iEmptyDetail,
+                      TRect( aRect.iTl.iX, top + titleH + 6,
+                             aRect.iBr.iX, top + titleH + 6 + detailH ),
+                      iTextFont->AscentInPixels(), CGraphicsContext::ECenter );
+        aGc.DiscardFont();
+        }
     }
 
 void CSymgramAppView::SizeChanged()

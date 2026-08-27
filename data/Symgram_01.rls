@@ -18,17 +18,10 @@ rls_string STRING_r_symgram_about_text "Telegram client for Symbian 9.2"
 //d:Connection status shown in the header when there is no session.
 rls_string STRING_r_symgram_status_offline "Not connected"
 
-//d:Shown in place of the chat list while it is empty.
-rls_string STRING_r_symgram_empty_hint "No chats"
+//d:Shown in place of the chat list while there is nothing to show.
+rls_string STRING_r_symgram_empty_title "No chats"
 
-// Placeholder chat list, shown until the MTProto layer can supply real dialogs.
-// Fields are separated by a vertical bar: name | last message | time | unread count.
-rls_string STRING_r_symgram_chat_1 "Anna|See you tomorrow then!|14:32|2"
-rls_string STRING_r_symgram_chat_2 "Work chat|Maxim: report is in the folder|13:58|0"
-rls_string STRING_r_symgram_chat_3 "Dmitry|Are you on your way?|12:20|1"
-rls_string STRING_r_symgram_chat_4 "Family|Mum: remember to call grandma|11:05|5"
-rls_string STRING_r_symgram_chat_5 "Saved messages|Article draft|Yesterday|0"
-rls_string STRING_r_symgram_chat_6 "Olga|Thanks for the help!|Yesterday|0"
-rls_string STRING_r_symgram_chat_7 "Neighbours|Peter: the yard is blocked off|Mon|0"
+//d:Explanation under the empty list title.
+rls_string STRING_r_symgram_empty_detail "Networking is not implemented"
 
 rls_string STRING_r_symgram_loc_resource_file "\\resource\\apps\\Symgram"

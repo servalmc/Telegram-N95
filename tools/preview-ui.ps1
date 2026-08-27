@@ -1,21 +1,36 @@
-# Renders a mock-up of the chat list at N95 resolution.
+# Renders the chat list at N95 resolution without a device.
 #
 # This is NOT a device screenshot: it re-implements the layout rules from
 # src/SymgramAppView.cpp on the desktop so the design can be reviewed without a
 # phone. Keep the constants below in step with the C++ side.
 #
+# Two modes:
+#   default   layout study, populated from tools\mock-chats.txt
+#   -Empty    what the application actually shows today, since it has no chats
+#
+# The mock chats deliberately live outside the application resources: shipping
+# them would make the build look like a working client.
+#
 # Display strings are read from the .rls resource rather than embedded here, so
 # there is one source of truth and no dependence on this file's encoding.
 
 param(
-    [string]$Rls = (Join-Path $PSScriptRoot "..\data\Symgram_16.rls"),
-    [string]$Out = (Join-Path $PSScriptRoot "..\docs\images\chat-list.png")
+    [string]$Rls  = (Join-Path $PSScriptRoot "..\data\Symgram_16.rls"),
+    [string]$Mock = (Join-Path $PSScriptRoot "mock-chats.txt"),
+    [string]$Out,
+    [switch]$Empty
 )
 
 Add-Type -AssemblyName System.Drawing
 
-$Rls = [System.IO.Path]::GetFullPath($Rls)
-$Out = [System.IO.Path]::GetFullPath($Out)
+if (-not $Out) {
+    $name = if ($Empty) { "empty-state.png" } else { "chat-list.png" }
+    $Out = Join-Path $PSScriptRoot "..\docs\images\$name"
+}
+
+$Rls  = [System.IO.Path]::GetFullPath($Rls)
+$Mock = [System.IO.Path]::GetFullPath($Mock)
+$Out  = [System.IO.Path]::GetFullPath($Out)
 New-Item -ItemType Directory -Force -Path ([System.IO.Path]::GetDirectoryName($Out)) | Out-Null
 
 # --- strings from the resource ------------------------------------------------
@@ -26,15 +41,19 @@ foreach ($m in [regex]::Matches($rlsText, 'rls_string\s+(\S+)\s+"([^"]*)"')) {
 }
 
 $chats = @()
-for ($i = 1; $i -le 20; $i++) {
-    $key = "STRING_r_symgram_chat_$i"
-    if (-not $strings.ContainsKey($key)) { continue }
-    $f = $strings[$key] -split '\|'
-    if ($f.Count -lt 4) { continue }
-    $chats += @{ n = $f[0]; p = $f[1]; t = $f[2]; u = [int]$f[3] }
+if (-not $Empty) {
+    foreach ($line in [System.IO.File]::ReadAllLines($Mock, [System.Text.Encoding]::UTF8)) {
+        $line = $line.Trim()
+        if (-not $line -or $line.StartsWith("#")) { continue }
+        $f = $line -split '\|'
+        if ($f.Count -lt 4) { continue }
+        $chats += @{ n = $f[0]; p = $f[1]; t = $f[2]; u = [int]$f[3] }
+    }
 }
 
 $statusText = $strings["STRING_r_symgram_status_offline"]
+$emptyTitle = $strings["STRING_r_symgram_empty_title"]
+$emptyDetail = $strings["STRING_r_symgram_empty_detail"]
 $appName = "Symgram"
 
 # --- geometry: the client rect the application actually draws ------------------
@@ -84,6 +103,25 @@ $g.FillRectangle((Brush $brand), 0, 0, $W, $headerH)
 $g.DrawString($appName, $titleFont, (Brush $paper), 6, 5)
 $sw = $g.MeasureString($statusText, $textFont).Width
 $g.DrawString($statusText, $textFont, (Brush $paper), $W - 6 - $sw, 6)
+
+# --- empty state, mirroring DrawEmptyState ------------------------------------
+if ($chats.Count -eq 0) {
+    $top = $headerH + ($H - $headerH - $nameH - $textH - 6) / 2
+
+    $tw = $g.MeasureString($emptyTitle, $nameFont).Width
+    $g.DrawString($emptyTitle, $nameFont, (Brush $ink), ($W - $tw) / 2, $top)
+
+    $dw = $g.MeasureString($emptyDetail, $textFont).Width
+    $g.DrawString($emptyDetail, $textFont, (Brush $muted), ($W - $dw) / 2, $top + $nameH + 6)
+
+    $g.Dispose()
+    $bmp.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png)
+    $bmp.Dispose()
+
+    "empty state rendered"
+    "written: $Out"
+    return
+}
 
 # --- rows ---------------------------------------------------------------------
 $y = $headerH

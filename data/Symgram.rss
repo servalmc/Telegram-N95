@@ -60,25 +60,14 @@ RESOURCE TBUF r_symgram_status_offline
     buf = STRING_r_symgram_status_offline;
     }
 
-RESOURCE TBUF r_symgram_empty_hint
+RESOURCE TBUF r_symgram_empty_title
     {
-    buf = STRING_r_symgram_empty_hint;
+    buf = STRING_r_symgram_empty_title;
     }
 
-// Placeholder dialogs for the list. Each entry packs four fields separated by a
-// vertical bar, which the view splits on load: name, last message, time, unread.
-RESOURCE ARRAY r_symgram_demo_chats
+RESOURCE TBUF r_symgram_empty_detail
     {
-    items =
-        {
-        LBUF { txt = STRING_r_symgram_chat_1; },
-        LBUF { txt = STRING_r_symgram_chat_2; },
-        LBUF { txt = STRING_r_symgram_chat_3; },
-        LBUF { txt = STRING_r_symgram_chat_4; },
-        LBUF { txt = STRING_r_symgram_chat_5; },
-        LBUF { txt = STRING_r_symgram_chat_6; },
-        LBUF { txt = STRING_r_symgram_chat_7; }
-        };
+    buf = STRING_r_symgram_empty_detail;
     }
 
 RESOURCE LOCALISABLE_APP_INFO r_symgram_localisable_app_info

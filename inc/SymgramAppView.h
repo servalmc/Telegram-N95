@@ -3,7 +3,8 @@
 
 #include <coecntrl.h>
 
-// One row of the chat list.
+// One row of the chat list. Nothing fills this yet: rows will come from
+// messages.getDialogs once the MTProto layer exists.
 class TSymgramChat
     {
     public:
@@ -34,8 +35,6 @@ class CSymgramAppView : public CCoeControl
         void ConstructL( const TRect& aRect );
         CSymgramAppView();
 
-        void LoadChatsL();
-
         void DrawHeader( CWindowGc& aGc, const TRect& aRect ) const;
         void DrawRow( CWindowGc& aGc, const TRect& aRect, TInt aIndex ) const;
         void DrawEmptyState( CWindowGc& aGc, const TRect& aRect ) const;
@@ -52,7 +51,8 @@ class CSymgramAppView : public CCoeControl
         const CFont* iTextFont;
 
         HBufC* iStatus;
-        HBufC* iEmptyHint;
+        HBufC* iEmptyTitle;
+        HBufC* iEmptyDetail;
 
         RArray<TSymgramChat> iChats;
         TInt iSelected;

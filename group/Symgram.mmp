@@ -59,4 +59,3 @@ LIBRARY           estor.lib
 // alone got by on virtual calls through the graphics context.
 LIBRARY           gdi.lib
 LIBRARY           fbscli.lib
-LIBRARY           bafl.lib
