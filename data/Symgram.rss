@@ -60,6 +60,21 @@ RESOURCE TBUF r_symgram_status_offline
     buf = STRING_r_symgram_status_offline;
     }
 
+RESOURCE TBUF r_symgram_status_unsigned
+    {
+    buf = STRING_r_symgram_status_unsigned;
+    }
+
+RESOURCE TBUF r_symgram_signin_title
+    {
+    buf = STRING_r_symgram_signin_title;
+    }
+
+RESOURCE TBUF r_symgram_signin_detail
+    {
+    buf = STRING_r_symgram_signin_detail;
+    }
+
 RESOURCE TBUF r_symgram_empty_title
     {
     buf = STRING_r_symgram_empty_title;

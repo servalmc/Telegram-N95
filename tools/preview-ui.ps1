@@ -6,7 +6,7 @@
 #
 # Two modes:
 #   default   layout study, populated from tools\mock-chats.txt
-#   -Empty    what the application actually shows today, since it has no chats
+#   -Empty    what the application actually shows today: the unsigned-in screen
 #
 # The mock chats deliberately live outside the application resources: shipping
 # them would make the build look like a working client.
@@ -24,7 +24,7 @@ param(
 Add-Type -AssemblyName System.Drawing
 
 if (-not $Out) {
-    $name = if ($Empty) { "empty-state.png" } else { "chat-list.png" }
+    $name = if ($Empty) { "sign-in.png" } else { "chat-list.png" }
     $Out = Join-Path $PSScriptRoot "..\docs\images\$name"
 }
 
@@ -51,9 +51,21 @@ if (-not $Empty) {
     }
 }
 
-$statusText = $strings["STRING_r_symgram_status_offline"]
-$emptyTitle = $strings["STRING_r_symgram_empty_title"]
-$emptyDetail = $strings["STRING_r_symgram_empty_detail"]
+$statusText = if ($Empty) {
+    $strings["STRING_r_symgram_status_unsigned"]
+} else {
+    $strings["STRING_r_symgram_status_offline"]
+}
+$emptyTitle = if ($Empty) {
+    $strings["STRING_r_symgram_signin_title"]
+} else {
+    $strings["STRING_r_symgram_empty_title"]
+}
+$emptyDetail = if ($Empty) {
+    $strings["STRING_r_symgram_signin_detail"]
+} else {
+    $strings["STRING_r_symgram_empty_detail"]
+}
 $appName = "Symgram"
 
 # --- geometry: the client rect the application actually draws ------------------

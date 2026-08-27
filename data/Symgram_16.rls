@@ -19,7 +19,16 @@ rls_string STRING_r_symgram_about_text "Клиент Telegram для Symbian 9.2
 //d:Connection status shown in the header when there is no session.
 rls_string STRING_r_symgram_status_offline "Нет соединения"
 
-//d:Shown in place of the chat list while there is nothing to show.
+//d:Header status while the user is not signed in.
+rls_string STRING_r_symgram_status_unsigned "Нет входа"
+
+//d:Title of the sign-in screen. Shown until there is a Telegram session.
+rls_string STRING_r_symgram_signin_title "Вход в Telegram"
+
+//d:Explanation that sign-in does not exist yet.
+rls_string STRING_r_symgram_signin_detail "Авторизация ещё не реализована"
+
+//d:Shown in place of the chat list after sign-in, while it is empty.
 rls_string STRING_r_symgram_empty_title "Чатов нет"
 
 //d:Explanation under the empty list title.

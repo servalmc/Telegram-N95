@@ -37,7 +37,10 @@ class CSymgramAppView : public CCoeControl
 
         void DrawHeader( CWindowGc& aGc, const TRect& aRect ) const;
         void DrawRow( CWindowGc& aGc, const TRect& aRect, TInt aIndex ) const;
+        void DrawSignIn( CWindowGc& aGc, const TRect& aRect ) const;
         void DrawEmptyState( CWindowGc& aGc, const TRect& aRect ) const;
+        void DrawCenteredPair( CWindowGc& aGc, const TRect& aRect,
+                               const HBufC* aTitle, const HBufC* aDetail ) const;
 
         TInt HeaderHeight() const;
         TInt RowHeight() const;
@@ -51,8 +54,14 @@ class CSymgramAppView : public CCoeControl
         const CFont* iTextFont;
 
         HBufC* iStatus;
+        HBufC* iSignInTitle;
+        HBufC* iSignInDetail;
         HBufC* iEmptyTitle;
         HBufC* iEmptyDetail;
+
+        // There is no session and no way to create one yet, so this stays false
+        // and the chat list is never shown.
+        TBool iSignedIn;
 
         RArray<TSymgramChat> iChats;
         TInt iSelected;

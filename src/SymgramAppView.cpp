@@ -77,7 +77,8 @@ CSymgramAppView* CSymgramAppView::NewLC( const TRect& aRect )
 
 CSymgramAppView::CSymgramAppView()
     : iTitleFont( NULL ), iNameFont( NULL ), iTextFont( NULL ),
-      iStatus( NULL ), iEmptyTitle( NULL ), iEmptyDetail( NULL ),
+      iStatus( NULL ), iSignInTitle( NULL ), iSignInDetail( NULL ),
+      iEmptyTitle( NULL ), iEmptyDetail( NULL ), iSignedIn( EFalse ),
       iSelected( 0 ), iTopRow( 0 )
     {
     }
@@ -86,6 +87,8 @@ CSymgramAppView::~CSymgramAppView()
     {
     iChats.Close();
     delete iStatus;
+    delete iSignInTitle;
+    delete iSignInDetail;
     delete iEmptyTitle;
     delete iEmptyDetail;
     }
@@ -98,9 +101,11 @@ void CSymgramAppView::ConstructL( const TRect& aRect )
     iNameFont  = AknLayoutUtils::FontFromId( EAknLogicalFontPrimaryFont );
     iTextFont  = AknLayoutUtils::FontFromId( EAknLogicalFontSecondaryFont );
 
-    iStatus      = StringLoader::LoadL( R_SYMGRAM_STATUS_OFFLINE );
-    iEmptyTitle  = StringLoader::LoadL( R_SYMGRAM_EMPTY_TITLE );
-    iEmptyDetail = StringLoader::LoadL( R_SYMGRAM_EMPTY_DETAIL );
+    iStatus       = StringLoader::LoadL( R_SYMGRAM_STATUS_UNSIGNED );
+    iSignInTitle  = StringLoader::LoadL( R_SYMGRAM_SIGNIN_TITLE );
+    iSignInDetail = StringLoader::LoadL( R_SYMGRAM_SIGNIN_DETAIL );
+    iEmptyTitle   = StringLoader::LoadL( R_SYMGRAM_EMPTY_TITLE );
+    iEmptyDetail  = StringLoader::LoadL( R_SYMGRAM_EMPTY_DETAIL );
 
     SetRect( aRect );
     ActivateL();
@@ -210,6 +215,11 @@ void CSymgramAppView::Draw( const TRect& /*aRect*/ ) const
     DrawHeader( gc, header );
 
     const TRect list( ListRect() );
+    if ( !iSignedIn )
+        {
+        DrawSignIn( gc, list );
+        return;
+        }
     if ( iChats.Count() == 0 )
         {
         DrawEmptyState( gc, list );
@@ -394,7 +404,19 @@ void CSymgramAppView::DrawRow( CWindowGc& aGc, const TRect& aRect,
                   TPoint( aRect.iBr.iX, aRect.iBr.iY - 1 ) );
     }
 
+void CSymgramAppView::DrawSignIn( CWindowGc& aGc, const TRect& aRect ) const
+    {
+    DrawCenteredPair( aGc, aRect, iSignInTitle, iSignInDetail );
+    }
+
 void CSymgramAppView::DrawEmptyState( CWindowGc& aGc, const TRect& aRect ) const
+    {
+    DrawCenteredPair( aGc, aRect, iEmptyTitle, iEmptyDetail );
+    }
+
+void CSymgramAppView::DrawCenteredPair( CWindowGc& aGc, const TRect& aRect,
+                                        const HBufC* aTitle,
+                                        const HBufC* aDetail ) const
     {
     if ( !iNameFont || !iTextFont )
         {
@@ -408,21 +430,21 @@ void CSymgramAppView::DrawEmptyState( CWindowGc& aGc, const TRect& aRect ) const
     aGc.SetPenStyle( CGraphicsContext::ESolidPen );
     aGc.SetBrushStyle( CGraphicsContext::ENullBrush );
 
-    if ( iEmptyTitle )
+    if ( aTitle )
         {
         aGc.UseFont( iNameFont );
         aGc.SetPenColor( Ink() );
-        aGc.DrawText( *iEmptyTitle,
+        aGc.DrawText( *aTitle,
                       TRect( aRect.iTl.iX, top, aRect.iBr.iX, top + titleH ),
                       iNameFont->AscentInPixels(), CGraphicsContext::ECenter );
         aGc.DiscardFont();
         }
 
-    if ( iEmptyDetail )
+    if ( aDetail )
         {
         aGc.UseFont( iTextFont );
         aGc.SetPenColor( Muted() );
-        aGc.DrawText( *iEmptyDetail,
+        aGc.DrawText( *aDetail,
                       TRect( aRect.iTl.iX, top + titleH + 6,
                              aRect.iBr.iX, top + titleH + 6 + detailH ),
                       iTextFont->AscentInPixels(), CGraphicsContext::ECenter );
