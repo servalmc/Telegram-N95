@@ -16,7 +16,20 @@ rls_string STRING_r_symgram_menu_exit "Выход"
 //d:Body of the about note, shown under the name and version.
 rls_string STRING_r_symgram_about_text "Клиент Telegram для Symbian 9.2"
 
-//d:Connection status shown when there is no session.
+//d:Connection status shown in the header when there is no session.
 rls_string STRING_r_symgram_status_offline "Нет соединения"
+
+//d:Shown in place of the chat list while it is empty.
+rls_string STRING_r_symgram_empty_hint "Нет чатов"
+
+// Placeholder chat list, shown until the MTProto layer can supply real dialogs.
+// Fields are separated by a vertical bar: name | last message | time | unread count.
+rls_string STRING_r_symgram_chat_1 "Анна|Договорились, до завтра!|14:32|2"
+rls_string STRING_r_symgram_chat_2 "Рабочий чат|Максим: закинул отчёт в папку|13:58|0"
+rls_string STRING_r_symgram_chat_3 "Дмитрий|Ты уже в пути?|12:20|1"
+rls_string STRING_r_symgram_chat_4 "Семья|Мама: не забудь позвонить бабушке|11:05|5"
+rls_string STRING_r_symgram_chat_5 "Избранное|Черновик статьи|Вчера|0"
+rls_string STRING_r_symgram_chat_6 "Ольга|Спасибо за помощь!|Вчера|0"
+rls_string STRING_r_symgram_chat_7 "Соседи|Петр: во дворе перекрыли проезд|Пн|0"
 
 rls_string STRING_r_symgram_loc_resource_file "\\resource\\apps\\Symgram"

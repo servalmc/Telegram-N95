@@ -6,6 +6,7 @@ CHARACTER_SET UTF8
 #include <avkon.rh>
 #include <avkon.rsg>
 #include <appinfo.rh>
+#include <badef.rh>
 #include "Symgram.hrh"
 #include "Symgram.rls"
 
@@ -59,6 +60,27 @@ RESOURCE TBUF r_symgram_status_offline
     buf = STRING_r_symgram_status_offline;
     }
 
+RESOURCE TBUF r_symgram_empty_hint
+    {
+    buf = STRING_r_symgram_empty_hint;
+    }
+
+// Placeholder dialogs for the list. Each entry packs four fields separated by a
+// vertical bar, which the view splits on load: name, last message, time, unread.
+RESOURCE ARRAY r_symgram_demo_chats
+    {
+    items =
+        {
+        LBUF { txt = STRING_r_symgram_chat_1; },
+        LBUF { txt = STRING_r_symgram_chat_2; },
+        LBUF { txt = STRING_r_symgram_chat_3; },
+        LBUF { txt = STRING_r_symgram_chat_4; },
+        LBUF { txt = STRING_r_symgram_chat_5; },
+        LBUF { txt = STRING_r_symgram_chat_6; },
+        LBUF { txt = STRING_r_symgram_chat_7; }
+        };
+    }
+
 RESOURCE LOCALISABLE_APP_INFO r_symgram_localisable_app_info
     {
     short_caption = STRING_r_symgram_short_caption;
@@ -66,5 +88,7 @@ RESOURCE LOCALISABLE_APP_INFO r_symgram_localisable_app_info
         CAPTION_AND_ICON_INFO
             {
             caption = STRING_r_symgram_caption;
+            number_of_icons = 1;
+            icon_file = "\\resource\\apps\\Symgram_aif.mbm";
             };
     }

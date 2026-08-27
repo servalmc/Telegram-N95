@@ -54,3 +54,9 @@ LIBRARY           avkon.lib
 LIBRARY           commonengine.lib
 LIBRARY           efsrv.lib
 LIBRARY           estor.lib
+
+// The chat list measures text itself, which needs the font classes; drawing
+// alone got by on virtual calls through the graphics context.
+LIBRARY           gdi.lib
+LIBRARY           fbscli.lib
+LIBRARY           bafl.lib

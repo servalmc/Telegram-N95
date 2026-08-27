@@ -21,6 +21,9 @@ abld.bat
 *.mbm
 *.mif
 
+# Design previews rendered by tools\make-icon.ps1 and tools\preview-ui.ps1
+gfx/preview_*.png
+
 # Packaged installers
 *.sis
 *.sisx

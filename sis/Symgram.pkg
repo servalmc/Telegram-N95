@@ -22,3 +22,7 @@
 } -"!:\resource\apps\Symgram.rsc"
 
 "\Symbian\9.2\S60_3rd_FP1\epoc32\data\z\private\10003a3f\import\apps\Symgram_reg.rsc" -"!:\private\10003a3f\import\apps\Symgram_reg.rsc"
+
+; Application icon. Bitmap icons live in an .mbm; the .mif mifconv emits
+; alongside it stays empty and is not shipped.
+"\Symbian\9.2\S60_3rd_FP1\epoc32\data\z\resource\apps\Symgram_aif.mbm" -"!:\resource\apps\Symgram_aif.mbm"
