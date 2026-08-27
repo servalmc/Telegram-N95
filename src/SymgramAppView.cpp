@@ -1,6 +1,9 @@
 #include <coemain.h>
+#include <eikenv.h>
+#include <badesca.h>
 #include <aknutils.h>
 #include <stringloader.h>
+#include <aknnotewrappers.h>
 #include <Symgram.rsg>
 
 #include "SymgramVersion.h"
@@ -8,6 +11,8 @@
 
 namespace
     {
+    const TInt KCallingCode[] = { 7, 375, 7, 380, 49, 1, 44, 358 };
+    const TInt KCountryCount = 8;
     inline TRgb Brand()      { return TRgb( 0x22, 0x9E, 0xD9 ); }
     inline TRgb Paper()      { return TRgb( 0xFF, 0xFF, 0xFF ); }
     inline TRgb Ink()        { return TRgb( 0x00, 0x00, 0x00 ); }
@@ -77,20 +82,24 @@ CSymgramAppView* CSymgramAppView::NewLC( const TRect& aRect )
 
 CSymgramAppView::CSymgramAppView()
     : iTitleFont( NULL ), iNameFont( NULL ), iTextFont( NULL ),
-      iStatus( NULL ), iSignInTitle( NULL ), iSignInDetail( NULL ),
-      iEmptyTitle( NULL ), iEmptyDetail( NULL ), iSignedIn( EFalse ),
-      iSelected( 0 ), iTopRow( 0 )
+      iStatus( NULL ), iSignInTitle( NULL ), iSignInHint( NULL ),
+      iEmptyTitle( NULL ), iEmptyDetail( NULL ), iPqOk( NULL ),
+      iCountries( NULL ), iSignedIn( EFalse ), iFocus( 1 ), iCountry( 0 ),
+      iSession( NULL ), iSelected( 0 ), iTopRow( 0 )
     {
     }
 
 CSymgramAppView::~CSymgramAppView()
     {
     iChats.Close();
+    delete iSession;
+    delete iCountries;
     delete iStatus;
     delete iSignInTitle;
-    delete iSignInDetail;
+    delete iSignInHint;
     delete iEmptyTitle;
     delete iEmptyDetail;
+    delete iPqOk;
     }
 
 void CSymgramAppView::ConstructL( const TRect& aRect )
@@ -101,11 +110,15 @@ void CSymgramAppView::ConstructL( const TRect& aRect )
     iNameFont  = AknLayoutUtils::FontFromId( EAknLogicalFontPrimaryFont );
     iTextFont  = AknLayoutUtils::FontFromId( EAknLogicalFontSecondaryFont );
 
-    iStatus       = StringLoader::LoadL( R_SYMGRAM_STATUS_UNSIGNED );
-    iSignInTitle  = StringLoader::LoadL( R_SYMGRAM_SIGNIN_TITLE );
-    iSignInDetail = StringLoader::LoadL( R_SYMGRAM_SIGNIN_DETAIL );
-    iEmptyTitle   = StringLoader::LoadL( R_SYMGRAM_EMPTY_TITLE );
-    iEmptyDetail  = StringLoader::LoadL( R_SYMGRAM_EMPTY_DETAIL );
+    iStatus      = StringLoader::LoadL( R_SYMGRAM_STATUS_UNSIGNED );
+    iSignInTitle = StringLoader::LoadL( R_SYMGRAM_SIGNIN_TITLE );
+    iSignInHint  = StringLoader::LoadL( R_SYMGRAM_SIGNIN_HINT );
+    iEmptyTitle  = StringLoader::LoadL( R_SYMGRAM_EMPTY_TITLE );
+    iEmptyDetail = StringLoader::LoadL( R_SYMGRAM_EMPTY_DETAIL );
+    iPqOk        = StringLoader::LoadL( R_SYMGRAM_PQ_OK );
+
+    iCountries = CEikonEnv::Static()->ReadDesCArrayResourceL( R_SYMGRAM_COUNTRIES );
+    iSession = CSymgramSession::NewL( *this );
 
     SetRect( aRect );
     ActivateL();
@@ -171,7 +184,64 @@ void CSymgramAppView::EnsureSelectionVisible()
 TKeyResponse CSymgramAppView::OfferKeyEventL( const TKeyEvent& aKeyEvent,
                                               TEventCode aType )
     {
-    if ( aType != EEventKey || iChats.Count() == 0 )
+    if ( aType != EEventKey )
+        {
+        return EKeyWasNotConsumed;
+        }
+
+    if ( !iSignedIn )
+        {
+        if ( aKeyEvent.iCode >= '0' && aKeyEvent.iCode <= '9' )
+            {
+            if ( iPhone.Length() < iPhone.MaxLength() )
+                {
+                iPhone.Append( (TText)aKeyEvent.iCode );
+                iFocus = 1;
+                DrawDeferred();
+                }
+            return EKeyWasConsumed;
+            }
+
+        switch ( aKeyEvent.iCode )
+            {
+            case EKeyBackspace:
+            case EKeyDelete:
+                if ( iPhone.Length() > 0 )
+                    {
+                    iPhone.SetLength( iPhone.Length() - 1 );
+                    DrawDeferred();
+                    }
+                return EKeyWasConsumed;
+
+            case EKeyUpArrow:
+                iFocus = 0;
+                DrawDeferred();
+                return EKeyWasConsumed;
+
+            case EKeyDownArrow:
+                iFocus = 1;
+                DrawDeferred();
+                return EKeyWasConsumed;
+
+            case EKeyLeftArrow:
+                CycleCountry( -1 );
+                return EKeyWasConsumed;
+
+            case EKeyRightArrow:
+                CycleCountry( 1 );
+                return EKeyWasConsumed;
+
+            case EKeyDevice3:
+            case EKeyEnter:
+                NextL();
+                return EKeyWasConsumed;
+
+            default:
+                return EKeyWasNotConsumed;
+            }
+        }
+
+    if ( iChats.Count() == 0 )
         {
         return EKeyWasNotConsumed;
         }
@@ -406,7 +476,168 @@ void CSymgramAppView::DrawRow( CWindowGc& aGc, const TRect& aRect,
 
 void CSymgramAppView::DrawSignIn( CWindowGc& aGc, const TRect& aRect ) const
     {
-    DrawCenteredPair( aGc, aRect, iSignInTitle, iSignInDetail );
+    if ( !iNameFont || !iTextFont )
+        {
+        return;
+        }
+
+    const TInt nameH = iNameFont->HeightInPixels();
+    const TInt textH = iTextFont->HeightInPixels();
+    TInt y = aRect.iTl.iY + 12;
+
+    aGc.SetPenStyle( CGraphicsContext::ESolidPen );
+    aGc.SetBrushStyle( CGraphicsContext::ENullBrush );
+
+    if ( iSignInTitle )
+        {
+        aGc.UseFont( iNameFont );
+        aGc.SetPenColor( Ink() );
+        aGc.DrawText( *iSignInTitle,
+                      TRect( aRect.iTl.iX + 8, y, aRect.iBr.iX - 8, y + nameH ),
+                      iNameFont->AscentInPixels(), CGraphicsContext::ELeft );
+        aGc.DiscardFont();
+        }
+    y += nameH + 14;
+
+    const TInt rowH = nameH + 12;
+    TRect countryRow( aRect.iTl.iX + 6, y, aRect.iBr.iX - 6, y + rowH );
+    aGc.SetPenStyle( CGraphicsContext::ENullPen );
+    aGc.SetBrushStyle( CGraphicsContext::ESolidBrush );
+    aGc.SetBrushColor( iFocus == 0 ? Highlight() : Rule() );
+    aGc.DrawRect( countryRow );
+
+    TBuf<32> country;
+    CountryName( country );
+    TBuf<12> code;
+    code.Num( CallingCode() );
+    TBuf<16> plus;
+    plus.Append( '+' );
+    plus.Append( code );
+
+    aGc.UseFont( iNameFont );
+    aGc.SetPenStyle( CGraphicsContext::ESolidPen );
+    aGc.SetPenColor( Ink() );
+    aGc.SetBrushStyle( CGraphicsContext::ENullBrush );
+    TRect cleft( countryRow );
+    cleft.iTl.iX += 8;
+    aGc.DrawText( country, cleft,
+                  ( rowH + iNameFont->AscentInPixels() ) / 2,
+                  CGraphicsContext::ELeft );
+    TRect cright( countryRow );
+    cright.iBr.iX -= 8;
+    aGc.DrawText( plus, cright,
+                  ( rowH + iNameFont->AscentInPixels() ) / 2,
+                  CGraphicsContext::ERight );
+    aGc.DiscardFont();
+    y += rowH + 8;
+
+    TRect phoneRow( aRect.iTl.iX + 6, y, aRect.iBr.iX - 6, y + rowH );
+    aGc.SetPenStyle( CGraphicsContext::ENullPen );
+    aGc.SetBrushStyle( CGraphicsContext::ESolidBrush );
+    aGc.SetBrushColor( iFocus == 1 ? Highlight() : Rule() );
+    aGc.DrawRect( phoneRow );
+
+    TBuf<24> shown;
+    shown.Append( '+' );
+    shown.Append( code );
+    shown.Append( ' ' );
+    shown.Append( iPhone );
+
+    aGc.UseFont( iNameFont );
+    aGc.SetPenStyle( CGraphicsContext::ESolidPen );
+    aGc.SetPenColor( Ink() );
+    aGc.SetBrushStyle( CGraphicsContext::ENullBrush );
+    TRect pleft( phoneRow );
+    pleft.iTl.iX += 8;
+    aGc.DrawText( shown, pleft,
+                  ( rowH + iNameFont->AscentInPixels() ) / 2,
+                  CGraphicsContext::ELeft );
+    aGc.DiscardFont();
+    y += rowH + 10;
+
+    if ( iSignInHint )
+        {
+        aGc.UseFont( iTextFont );
+        aGc.SetPenColor( Muted() );
+        aGc.DrawText( *iSignInHint,
+                      TRect( aRect.iTl.iX + 8, y, aRect.iBr.iX - 8, y + textH * 2 ),
+                      iTextFont->AscentInPixels(), CGraphicsContext::ELeft );
+        aGc.DiscardFont();
+        }
+    }
+
+void CSymgramAppView::CountryName( TDes& aOut ) const
+    {
+    aOut.Zero();
+    if ( iCountries && iCountry >= 0 && iCountry < iCountries->Count() )
+        {
+        aOut.Copy( ( *iCountries )[ iCountry ] );
+        }
+    }
+
+TInt CSymgramAppView::CallingCode() const
+    {
+    if ( iCountry >= 0 && iCountry < KCountryCount )
+        {
+        return KCallingCode[ iCountry ];
+        }
+    return 7;
+    }
+
+void CSymgramAppView::CycleCountry( TInt aDelta )
+    {
+    const TInt n = iCountries ? iCountries->Count() : KCountryCount;
+    if ( n <= 0 )
+        {
+        return;
+        }
+    iCountry = ( iCountry + aDelta ) % n;
+    if ( iCountry < 0 )
+        {
+        iCountry += n;
+        }
+    iFocus = 0;
+    DrawDeferred();
+    }
+
+void CSymgramAppView::NextL()
+    {
+    if ( iSignedIn || !iSession || iSession->IsBusy() )
+        {
+        return;
+        }
+    if ( iPhone.Length() < 6 )
+        {
+        return;
+        }
+    iSession->ConnectL();
+    }
+
+void CSymgramAppView::SessionStatusL( const TDesC& aText )
+    {
+    SetStatusL( aText );
+    }
+
+void CSymgramAppView::SessionFailedL( TInt aError )
+    {
+    TBuf<32> text;
+    _LIT( KErr, "Ошибка " );
+    text.Copy( KErr );
+    text.AppendNum( aError );
+    SetStatusL( text );
+
+    CAknErrorNote* note = new ( ELeave ) CAknErrorNote( ETrue );
+    note->ExecuteLD( text );
+    }
+
+void CSymgramAppView::SessionPqOkL()
+    {
+    if ( iPqOk )
+        {
+        SetStatusL( *iPqOk );
+        CAknInformationNote* note = new ( ELeave ) CAknInformationNote( ETrue );
+        note->ExecuteLD( *iPqOk );
+        }
     }
 
 void CSymgramAppView::DrawEmptyState( CWindowGc& aGc, const TRect& aRect ) const

@@ -21,6 +21,7 @@ SOURCE            SymgramApplication.cpp
 SOURCE            SymgramDocument.cpp
 SOURCE            SymgramAppUi.cpp
 SOURCE            SymgramAppView.cpp
+SOURCE            SymgramSession.cpp
 
 USERINCLUDE       ..\inc
 SYSTEMINCLUDE     \epoc32\include
@@ -59,3 +60,8 @@ LIBRARY           estor.lib
 // alone got by on virtual calls through the graphics context.
 LIBRARY           gdi.lib
 LIBRARY           fbscli.lib
+LIBRARY           bafl.lib
+LIBRARY           esock.lib
+LIBRARY           insock.lib
+LIBRARY           commdb.lib
+LIBRARY           random.lib

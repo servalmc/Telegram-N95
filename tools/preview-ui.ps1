@@ -6,7 +6,7 @@
 #
 # Two modes:
 #   default   layout study, populated from tools\mock-chats.txt
-#   -Empty    what the application actually shows today: no sign-in function
+#   -Empty    what the application actually shows today: the phone-number screen
 #
 # The mock chats deliberately live outside the application resources: shipping
 # them would make the build look like a working client.
@@ -62,10 +62,11 @@ $emptyTitle = if ($Empty) {
     $strings["STRING_r_symgram_empty_title"]
 }
 $emptyDetail = if ($Empty) {
-    $strings["STRING_r_symgram_signin_detail"]
+    $strings["STRING_r_symgram_signin_hint"]
 } else {
     $strings["STRING_r_symgram_empty_detail"]
 }
+$countryName = $strings["STRING_r_symgram_cc_ru"]
 $appName = "Symgram"
 
 # --- geometry: the client rect the application actually draws ------------------
@@ -116,21 +117,30 @@ $g.DrawString($appName, $titleFont, (Brush $paper), 6, 5)
 $sw = $g.MeasureString($statusText, $textFont).Width
 $g.DrawString($statusText, $textFont, (Brush $paper), $W - 6 - $sw, 6)
 
-# --- empty state, mirroring DrawEmptyState ------------------------------------
+# --- phone screen, mirroring DrawSignIn ---------------------------------------
 if ($chats.Count -eq 0) {
-    $top = $headerH + ($H - $headerH - $nameH - $textH - 6) / 2
+    $y = $headerH + 12
+    $g.DrawString($emptyTitle, $nameFont, (Brush $ink), 8, $y)
+    $y += $nameH + 14
 
-    $tw = $g.MeasureString($emptyTitle, $nameFont).Width
-    $g.DrawString($emptyTitle, $nameFont, (Brush $ink), ($W - $tw) / 2, $top)
+    $fieldH = $nameH + 12
+    $g.FillRectangle((Brush $rule), 6, $y, $W - 12, $fieldH)
+    $g.DrawString($countryName, $nameFont, (Brush $ink), 14, $y + 6)
+    $cw = $g.MeasureString("+7", $nameFont).Width
+    $g.DrawString("+7", $nameFont, (Brush $ink), $W - 14 - $cw, $y + 6)
+    $y += $fieldH + 8
 
-    $dw = $g.MeasureString($emptyDetail, $textFont).Width
-    $g.DrawString($emptyDetail, $textFont, (Brush $muted), ($W - $dw) / 2, $top + $nameH + 6)
+    $g.FillRectangle((Brush $highlight), 6, $y, $W - 12, $fieldH)
+    $g.DrawString("+7 ", $nameFont, (Brush $ink), 14, $y + 6)
+    $y += $fieldH + 10
+
+    $g.DrawString($emptyDetail, $textFont, (Brush $muted), 8, $y)
 
     $g.Dispose()
     $bmp.Save($Out, [System.Drawing.Imaging.ImageFormat]::Png)
     $bmp.Dispose()
 
-    "empty state rendered"
+    "sign-in screen rendered"
     "written: $Out"
     return
 }

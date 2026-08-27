@@ -13,6 +13,12 @@ rls_string STRING_r_symgram_menu_about "О программе"
 //d:Options menu, closes the application.
 rls_string STRING_r_symgram_menu_exit "Выход"
 
+//d:Options menu, sends the phone number onward.
+rls_string STRING_r_symgram_menu_next "Далее"
+
+//d:Options menu, cycles the calling-code country.
+rls_string STRING_r_symgram_menu_country "Страна"
+
 //d:Body of the about note, shown under the name and version.
 rls_string STRING_r_symgram_about_text "Клиент Telegram для Symbian 9.2"
 
@@ -22,11 +28,23 @@ rls_string STRING_r_symgram_status_offline "Нет соединения"
 //d:Header status while the user is not signed in.
 rls_string STRING_r_symgram_status_unsigned "Нет входа"
 
-//d:Title while unsigned: there is no login function at all.
-rls_string STRING_r_symgram_signin_title "Функции входа нет"
+//d:Title of the phone-number screen.
+rls_string STRING_r_symgram_signin_title "Ваш номер телефона"
 
-//d:Explanation that phone, code and session do not exist.
-rls_string STRING_r_symgram_signin_detail "Нет номера, кода и сессии"
+//d:Hint under the phone field.
+rls_string STRING_r_symgram_signin_hint "Код придёт в Telegram или по SMS"
+
+//d:Status after Telegram answered the first handshake packet.
+rls_string STRING_r_symgram_pq_ok "Telegram ответил"
+
+rls_string STRING_r_symgram_cc_ru "Россия"
+rls_string STRING_r_symgram_cc_by "Беларусь"
+rls_string STRING_r_symgram_cc_kz "Казахстан"
+rls_string STRING_r_symgram_cc_ua "Украина"
+rls_string STRING_r_symgram_cc_de "Германия"
+rls_string STRING_r_symgram_cc_us "США"
+rls_string STRING_r_symgram_cc_gb "Великобритания"
+rls_string STRING_r_symgram_cc_fi "Финляндия"
 
 //d:Shown in place of the chat list after sign-in, while it is empty.
 rls_string STRING_r_symgram_empty_title "Чатов нет"

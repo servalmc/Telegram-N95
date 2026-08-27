@@ -3,7 +3,9 @@
 
 enum TSymgramCommandIds
     {
-    ESymgramCmdAbout = 1
+    ESymgramCmdAbout = 1,
+    ESymgramCmdNext,
+    ESymgramCmdCountry
     };
 
 #endif // __SYMGRAM_HRH__

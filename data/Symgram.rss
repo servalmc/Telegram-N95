@@ -39,6 +39,16 @@ RESOURCE MENU_PANE r_symgram_menu
         {
         MENU_ITEM
             {
+            command = ESymgramCmdNext;
+            txt = STRING_r_symgram_menu_next;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdCountry;
+            txt = STRING_r_symgram_menu_country;
+            },
+        MENU_ITEM
+            {
             command = ESymgramCmdAbout;
             txt = STRING_r_symgram_menu_about;
             },
@@ -70,9 +80,29 @@ RESOURCE TBUF r_symgram_signin_title
     buf = STRING_r_symgram_signin_title;
     }
 
-RESOURCE TBUF r_symgram_signin_detail
+RESOURCE TBUF r_symgram_signin_hint
     {
-    buf = STRING_r_symgram_signin_detail;
+    buf = STRING_r_symgram_signin_hint;
+    }
+
+RESOURCE TBUF r_symgram_pq_ok
+    {
+    buf = STRING_r_symgram_pq_ok;
+    }
+
+RESOURCE ARRAY r_symgram_countries
+    {
+    items =
+        {
+        LBUF { txt = STRING_r_symgram_cc_ru; },
+        LBUF { txt = STRING_r_symgram_cc_by; },
+        LBUF { txt = STRING_r_symgram_cc_kz; },
+        LBUF { txt = STRING_r_symgram_cc_ua; },
+        LBUF { txt = STRING_r_symgram_cc_de; },
+        LBUF { txt = STRING_r_symgram_cc_us; },
+        LBUF { txt = STRING_r_symgram_cc_gb; },
+        LBUF { txt = STRING_r_symgram_cc_fi; }
+        };
     }
 
 RESOURCE TBUF r_symgram_empty_title

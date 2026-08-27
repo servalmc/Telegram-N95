@@ -9,6 +9,12 @@ rls_string STRING_r_symgram_short_caption "Symgram"
 //d:Options menu, opens the about note.
 rls_string STRING_r_symgram_menu_about "About"
 
+//d:Options menu, sends the phone number onward.
+rls_string STRING_r_symgram_menu_next "Next"
+
+//d:Options menu, cycles the calling-code country.
+rls_string STRING_r_symgram_menu_country "Country"
+
 //d:Options menu, closes the application.
 rls_string STRING_r_symgram_menu_exit "Exit"
 
@@ -21,11 +27,23 @@ rls_string STRING_r_symgram_status_offline "Not connected"
 //d:Header status while the user is not signed in.
 rls_string STRING_r_symgram_status_unsigned "Not signed in"
 
-//d:Title while unsigned: there is no login function at all.
-rls_string STRING_r_symgram_signin_title "No sign-in"
+//d:Title of the phone-number screen.
+rls_string STRING_r_symgram_signin_title "Your phone number"
 
-//d:Explanation that phone, code and session do not exist.
-rls_string STRING_r_symgram_signin_detail "No number, code or session"
+//d:Hint under the phone field.
+rls_string STRING_r_symgram_signin_hint "The code will arrive in Telegram or by SMS"
+
+//d:Status after Telegram answered the first handshake packet.
+rls_string STRING_r_symgram_pq_ok "Telegram answered"
+
+rls_string STRING_r_symgram_cc_ru "Russia"
+rls_string STRING_r_symgram_cc_by "Belarus"
+rls_string STRING_r_symgram_cc_kz "Kazakhstan"
+rls_string STRING_r_symgram_cc_ua "Ukraine"
+rls_string STRING_r_symgram_cc_de "Germany"
+rls_string STRING_r_symgram_cc_us "United States"
+rls_string STRING_r_symgram_cc_gb "United Kingdom"
+rls_string STRING_r_symgram_cc_fi "Finland"
 
 //d:Shown in place of the chat list after sign-in, while it is empty.
 rls_string STRING_r_symgram_empty_title "No chats"

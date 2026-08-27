@@ -40,6 +40,20 @@ void CSymgramAppUi::HandleCommandL( TInt aCommand )
             Exit();
             break;
 
+        case ESymgramCmdNext:
+            if ( iAppView )
+                {
+                iAppView->NextL();
+                }
+            break;
+
+        case ESymgramCmdCountry:
+            if ( iAppView )
+                {
+                iAppView->CycleCountry( 1 );
+                }
+            break;
+
         case ESymgramCmdAbout:
             ShowAboutL();
             break;

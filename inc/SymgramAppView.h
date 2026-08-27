@@ -2,9 +2,9 @@
 #define __SYMGRAMAPPVIEW_H__
 
 #include <coecntrl.h>
+#include <badesca.h>
+#include "SymgramSession.h"
 
-// One row of the chat list. Nothing fills this yet: rows will come from
-// messages.getDialogs once the MTProto layer exists.
 class TSymgramChat
     {
     public:
@@ -14,7 +14,7 @@ class TSymgramChat
         TInt     iUnread;
     };
 
-class CSymgramAppView : public CCoeControl
+class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
     {
     public:
         static CSymgramAppView* NewL( const TRect& aRect );
@@ -23,9 +23,16 @@ class CSymgramAppView : public CCoeControl
 
     public:
         void SetStatusL( const TDesC& aStatus );
+        void NextL();
+        void CycleCountry( TInt aDelta );
 
     public: // from CCoeControl
         TKeyResponse OfferKeyEventL( const TKeyEvent& aKeyEvent, TEventCode aType );
+
+    private: // from MSymgramSessionObserver
+        void SessionStatusL( const TDesC& aText );
+        void SessionFailedL( TInt aError );
+        void SessionPqOkL();
 
     private: // from CCoeControl
         void Draw( const TRect& aRect ) const;
@@ -47,6 +54,8 @@ class CSymgramAppView : public CCoeControl
         TInt VisibleRows() const;
         TRect ListRect() const;
         void EnsureSelectionVisible();
+        void CountryName( TDes& aOut ) const;
+        TInt CallingCode() const;
 
     private:
         const CFont* iTitleFont;
@@ -55,17 +64,23 @@ class CSymgramAppView : public CCoeControl
 
         HBufC* iStatus;
         HBufC* iSignInTitle;
-        HBufC* iSignInDetail;
+        HBufC* iSignInHint;
         HBufC* iEmptyTitle;
         HBufC* iEmptyDetail;
+        HBufC* iPqOk;
 
-        // There is no session and no way to create one yet, so this stays false
-        // and the chat list is never shown.
+        CDesCArray* iCountries;
+
         TBool iSignedIn;
+        TInt iFocus;
+        TInt iCountry;
+        TBuf<16> iPhone;
+
+        CSymgramSession* iSession;
 
         RArray<TSymgramChat> iChats;
         TInt iSelected;
         TInt iTopRow;
     };
 
-#endif // __SYMGRAMAPPVIEW_H__
+#endif
