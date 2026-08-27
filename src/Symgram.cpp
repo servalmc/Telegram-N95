@@ -1,9 +1,9 @@
 #include <eikstart.h>
-#include "TelegramN95Application.h"
+#include "SymgramApplication.h"
 
 LOCAL_C CApaApplication* NewApplication()
     {
-    return new CTelegramN95Application;
+    return new CSymgramApplication;
     }
 
 GLDEF_C TInt E32Main()

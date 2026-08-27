@@ -1,0 +1,9 @@
+#ifndef __SYMGRAM_HRH__
+#define __SYMGRAM_HRH__
+
+enum TSymgramCommandIds
+    {
+    ESymgramCmdAbout = 1
+    };
+
+#endif // __SYMGRAM_HRH__

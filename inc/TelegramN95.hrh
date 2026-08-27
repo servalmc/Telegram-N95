@@ -1,9 +1,0 @@
-#ifndef __TELEGRAMN95_HRH__
-#define __TELEGRAMN95_HRH__
-
-enum TTelegramN95CommandIds
-    {
-    ETelegramN95CmdAbout = 1
-    };
-
-#endif // __TELEGRAMN95_HRH__

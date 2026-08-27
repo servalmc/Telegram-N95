@@ -1,55 +1,76 @@
-# Telegram-N95
+# Symgram
 
-Native Symbian C++ application targeting **Symbian OS 9.2 / S60 3rd Edition Feature Pack 1** — the platform of the Nokia N95.
+Нативный Telegram-клиент для **Symbian OS 9.2 / S60 3rd Edition Feature Pack 1** —
+платформы Nokia N95 8GB.
 
-## Status
+## Состояние
 
-Runnable application skeleton: an AVKON GUI app that starts, shows a status line and an Options
-menu, and builds all the way to a self-signed `.sisx` installable on a device. None of the
-Telegram protocol is implemented yet.
+Каркас приложения: запускается, показывает строку состояния и меню «Опции», собирается
+до самоподписанного `.sisx`, устанавливаемого на телефон. Протокол Telegram ещё не реализован.
 
-The application UID is `0xE0A11E95`, taken from the unprotected range so the package can be
-self-signed. Requested capabilities are `NetworkServices`, `ReadUserData`, `WriteUserData` and
-`UserEnvironment` — all user-grantable, which keeps self-signing viable.
+Этап технического исследования завершён — выводы и вытекающие из них решения собраны
+в [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md). Полное техническое задание —
+в [docs/SPEC.md](docs/SPEC.md), история версий — в [CHANGELOG.md](CHANGELOG.md).
 
-## Build environment
+UID приложения — `0xE0A11E95`, из незащищённого диапазона, поэтому пакет можно
+подписывать самостоятельно. Запрашиваемые права (`NetworkServices`, `ReadUserData`,
+`WriteUserData`, `UserEnvironment`) выдаются пользователем при установке, что
+позволяет обойтись без Symbian Signed.
 
-| Component | Version |
+## Языки
+
+Основной язык интерфейса — русский, дополнительный — английский. Строки вынесены
+в `data/Symgram_16.rls` (русский) и `data/Symgram_01.rls` (английский); файл
+`data/Symgram.rls` выбирает вариант по коду языка телефона, а вариант по умолчанию
+указывает на русский.
+
+## Окружение сборки
+
+| Компонент | Версия |
 | --- | --- |
-| Platform | Symbian OS 9.2, S60 3rd Edition FP1 |
+| Платформа | Symbian OS 9.2, S60 3rd Edition FP1 |
 | SDK | S60 3rd Edition FP1 SDK for Symbian OS, for C++ |
-| Compiler (device) | GCCE — GCC 3.4.3, CodeSourcery ARM Q1C 2005 |
-| Compiler (emulator) | WINSCW |
+| Компилятор для устройства | GCCE — GCC 3.4.3, CodeSourcery ARM Q1C 2005 |
+| Компилятор для эмулятора | WINSCW |
 
-See [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md) for how it is installed and for the platform quirks
-worth knowing before touching a build.
+Как всё это установлено и какие у платформы неочевидные особенности —
+в [docs/TOOLCHAIN.md](docs/TOOLCHAIN.md).
 
-## Building
+## Сборка
 
-Run from `cmd.exe`, not PowerShell — see the toolchain notes for why.
-
-```
-tools\build.bat              REM GCCE release, for the device
-tools\build.bat winscw udeb  REM emulator
-tools\package.bat            REM sis\TelegramN95.sisx, self-signed
-```
-
-`package.bat` generates a self-signing certificate on first run and reuses it afterwards; the
-certificate and key stay out of version control.
-
-## Layout
+Запускать из `cmd.exe`, не из PowerShell — причина описана в заметках по окружению.
 
 ```
-group/    bld.inf, .mmp project files
-inc/      headers
-src/      sources
-data/     .rss resource files
-sis/      .pkg packaging scripts
-gfx/      icons (.svg) and bitmaps
+tools\release.bat            REM сборка под устройство и упаковка в .sisx
+tools\build.bat              REM только сборка, GCCE release
+tools\package.bat            REM только упаковка и подпись
 ```
 
-## Notes
+`package.bat` при первом запуске создаёт сертификат для самоподписи и дальше
+переиспользует его; сертификат и ключ в репозиторий не попадают.
 
-Applications for Symbian 9.x are capability-constrained. Self-signed builds are limited to the basic
-capability set; anything beyond that requires a Symbian Signed or developer certificate, and the
-application UID must come from the unprotected range (`0xE0000000`–`0xEFFFFFFF`) for self-signing.
+Установка на телефон и подготовка N95 к самоподписанным пакетам описаны
+в [docs/DEVICE.md](docs/DEVICE.md).
+
+Сборка под эмулятор (`abld build winscw`) сейчас невозможна: цель WINSCW собирается
+компилятором Metrowerks CodeWarrior, который входит в состав Carbide.c++, а не SDK.
+Проверка ведётся на устройстве.
+
+## Структура
+
+```
+group/    bld.inf и файлы проекта .mmp
+inc/      заголовки
+src/      исходники
+data/     ресурсы .rss и строки локализации .rls
+sis/      сценарии упаковки .pkg
+tools/    скрипты сборки и упаковки
+docs/     ТЗ, архитектура, окружение сборки
+```
+
+## Выпуск версий
+
+Каждая версия помечается тегом `vX.Y.Z` в этом репозитории, к релизу прикладывается
+подписанный `.sisx`. Номер версии задаётся в трёх местах и должен совпадать:
+`inc/SymgramVersion.h`, `VERSION` в `group/Symgram.mmp` и заголовок пакета
+в `sis/Symgram.pkg`.

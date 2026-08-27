@@ -1,5 +1,6 @@
-TARGET            TelegramN95.exe
+TARGET            Symgram.exe
 TARGETTYPE        exe
+VERSION           0.1
 
 // 0x100039CE is the standard UID2 for a GUI application.
 // UID3 sits in the unprotected 0xE0000000-0xEFFFFFFF range so the package
@@ -15,29 +16,33 @@ CAPABILITY        NetworkServices ReadUserData WriteUserData UserEnvironment
 VENDORID          0
 
 SOURCEPATH        ..\src
-SOURCE            TelegramN95.cpp
-SOURCE            TelegramN95Application.cpp
-SOURCE            TelegramN95Document.cpp
-SOURCE            TelegramN95AppUi.cpp
-SOURCE            TelegramN95AppView.cpp
+SOURCE            Symgram.cpp
+SOURCE            SymgramApplication.cpp
+SOURCE            SymgramDocument.cpp
+SOURCE            SymgramAppUi.cpp
+SOURCE            SymgramAppView.cpp
 
 USERINCLUDE       ..\inc
 SYSTEMINCLUDE     \epoc32\include
 
 SOURCEPATH        ..\data
 
-START RESOURCE    TelegramN95.rss
+START RESOURCE    Symgram.rss
 HEADER
 TARGETPATH        resource\apps
 END
 
-START RESOURCE    TelegramN95_reg.rss
+START RESOURCE    Symgram_reg.rss
 #ifdef WINSCW
 TARGETPATH        \private\10003a3f\apps
 #else
 TARGETPATH        \private\10003a3f\import\apps
 #endif
 END
+
+// SC is the fallback variant and carries Russian, the primary language.
+// 16 is Russian, 01 is UK English.
+LANG              SC 01 16
 
 LIBRARY           euser.lib
 LIBRARY           apparc.lib
