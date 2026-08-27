@@ -37,6 +37,12 @@ rls_string STRING_r_symgram_signin_hint "Код придёт в Telegram или 
 //d:Status after Telegram answered the first handshake packet.
 rls_string STRING_r_symgram_pq_ok "Telegram ответил"
 
+//d:Title of the SMS-code screen.
+rls_string STRING_r_symgram_code_title "Код из Telegram"
+
+//d:Hint under the code field.
+rls_string STRING_r_symgram_code_hint "Введите код из приложения или SMS"
+
 rls_string STRING_r_symgram_cc_ru "Россия"
 rls_string STRING_r_symgram_cc_by "Беларусь"
 rls_string STRING_r_symgram_cc_kz "Казахстан"
@@ -50,6 +56,6 @@ rls_string STRING_r_symgram_cc_fi "Финляндия"
 rls_string STRING_r_symgram_empty_title "Чатов нет"
 
 //d:Explanation under the empty list title.
-rls_string STRING_r_symgram_empty_detail "Сетевая часть не реализована"
+rls_string STRING_r_symgram_empty_detail "Переписка появится здесь"
 
 rls_string STRING_r_symgram_loc_resource_file "\\resource\\apps\\Symgram"

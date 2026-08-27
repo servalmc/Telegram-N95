@@ -32,7 +32,9 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
     private: // from MSymgramSessionObserver
         void SessionStatusL( const TDesC& aText );
         void SessionFailedL( TInt aError );
-        void SessionPqOkL();
+        void SessionErrorL( const TDesC& aText );
+        void SessionCodeSentL();
+        void SessionSignedInL();
 
     private: // from CCoeControl
         void Draw( const TRect& aRect ) const;
@@ -67,14 +69,17 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         HBufC* iSignInHint;
         HBufC* iEmptyTitle;
         HBufC* iEmptyDetail;
-        HBufC* iPqOk;
+        HBufC* iCodeTitle;
+        HBufC* iCodeHint;
 
         CDesCArray* iCountries;
 
         TBool iSignedIn;
+        TBool iAwaitingCode;
         TInt iFocus;
         TInt iCountry;
         TBuf<16> iPhone;
+        TBuf<8> iSmsCode;
 
         CSymgramSession* iSession;
 

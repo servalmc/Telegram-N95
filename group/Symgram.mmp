@@ -8,7 +8,7 @@ VERSION           0.1
 UID               0x100039CE 0xE0A11E95
 SECUREID          0xE0A11E95
 
-EPOCSTACKSIZE     0x5000
+EPOCSTACKSIZE     0x10000
 EPOCHEAPSIZE      0x020000 0x800000
 
 // All of these are user-grantable, which keeps self-signing possible.
@@ -22,6 +22,7 @@ SOURCE            SymgramDocument.cpp
 SOURCE            SymgramAppUi.cpp
 SOURCE            SymgramAppView.cpp
 SOURCE            SymgramSession.cpp
+SOURCE            SymgramCrypto.cpp
 
 USERINCLUDE       ..\inc
 SYSTEMINCLUDE     \epoc32\include

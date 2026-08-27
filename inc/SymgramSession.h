@@ -5,25 +5,26 @@
 #include <es_sock.h>
 #include <in_sock.h>
 #include <commdbconnpref.h>
+#include "SymgramCrypto.h"
 
 class MSymgramSessionObserver
     {
     public:
         virtual void SessionStatusL( const TDesC& aText ) = 0;
         virtual void SessionFailedL( TInt aError ) = 0;
-        virtual void SessionPqOkL() = 0;
+        virtual void SessionErrorL( const TDesC& aText ) = 0;
+        virtual void SessionCodeSentL() = 0;
+        virtual void SessionSignedInL() = 0;
     };
 
-// Opens a packet data connection, connects to a Telegram DC and sends the
-// unencrypted req_pq_multi handshake. Further steps (RSA, DH, auth.sendCode)
-// need extra crypto and api_id; this class stops at a verified resPQ.
 class CSymgramSession : public CActive
     {
     public:
         static CSymgramSession* NewL( MSymgramSessionObserver& aObserver );
         ~CSymgramSession();
 
-        void ConnectL();
+        void ConnectL( const TDesC8& aPhone );
+        void SubmitCodeL( const TDesC8& aCode );
         TBool IsBusy() const;
 
     private:
@@ -44,16 +45,38 @@ class CSymgramSession : public CActive
         TInt RunError( TInt aError );
 
         void FailL( TInt aError );
+        void RpcFailL( const TDesC8& aMsg );
         void CloseSocket();
         void SendPqL();
+        void SendDhParamsL();
+        void SendSendCodeL();
+        void SendSignInL();
+        void SendEncryptedL( const TDesC8& aMsg );
         void ReadMoreL();
         void HandleIncomingL();
+        void HandleUnencryptedL( const TUint8* aBody, TInt aLen );
+        void HandleEncryptedL( const TUint8* aPacket, TInt aLen );
+        void DispatchInnerL( const TUint8* aP, TInt aLen );
+        void HandlePqL( const TUint8* aBody, TInt aLen );
+        void HandleServerDhL( const TUint8* aBody, TInt aLen );
+        void HandleDhGenL( const TUint8* aBody, TInt aLen );
+        void HandleRpcResultL( const TUint8* aP, TInt aLen );
+        TInt SkipSentCodeType( const TUint8* aP, TInt aRemain, TInt& aSkip );
+        TInt RsaPad( const TDesC8& aData, TDes8& aOut );
         void BuildUnencryptedL( const TDesC8& aBody, TDes8& aOut );
-        TUint64 MessageId() const;
+        void WritePacketL( const TDesC8& aPayload );
+        void DeriveAes( TInt aX, const TUint8 aMsgKey[ 16 ],
+                        TUint8 aAesKey[ 32 ], TUint8 aAesIv[ 32 ] ) const;
+        void TmpAes( TUint8 aKey[ 32 ], TUint8 aIv[ 32 ] ) const;
+        TUint64 MessageId();
+        TUint32 SeqNo();
+        TInt UnixNow() const;
 
     private:
         MSymgramSessionObserver& iObserver;
         TState iState;
+        TBool iBusy;
+        TBool iSentAbridged;
 
         RSocketServ iServ;
         RConnection iConn;
@@ -63,8 +86,30 @@ class CSymgramSession : public CActive
         TSockXfrLength iXfrLen;
 
         TBuf8<16> iNonce;
-        TBuf8<512> iOut;
-        TBuf8<512> iIn;
+        TBuf8<16> iServerNonce;
+        TBuf8<32> iNewNonce;
+        TBuf8<16> iPq;
+        TBuf8<8> iP;
+        TBuf8<8> iQ;
+        TInt64 iFingerprint;
+        const TUint8* iRsaN;
+        TBuf8<32> iTmpKey;
+        TBuf8<32> iTmpIv;
+        TBuf8<256> iAuthKey;
+        TUint64 iAuthKeyId;
+        TUint64 iSalt;
+        TUint64 iSessionId;
+        TUint64 iLastMsgId;
+        TInt iSeq;
+        TInt iTimeOffset;
+        TInt iPhase;
+        TBuf8<24> iPhone;
+        TBuf8<64> iPhoneCodeHash;
+        TBuf8<16> iCode;
+        TBuf8<512> iLastRpc;
+
+        TBuf8<2048> iOut;
+        TBuf8<4096> iIn;
         TPtr8 iRead;
         TInt iHave;
     };
