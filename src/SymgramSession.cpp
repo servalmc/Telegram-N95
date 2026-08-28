@@ -7,6 +7,12 @@
 #include "SymgramSession.h"
 #include "SymgramApi.h"
 
+#ifdef __GCCE__
+#define SYMGRAM_NOINLINE __attribute__((noinline))
+#else
+#define SYMGRAM_NOINLINE
+#endif
+
 namespace
     {
     const TUint32 KDcAddr[] =
@@ -810,160 +816,6 @@ namespace
         return ETrue;
         }
 
-    TInt SkipChatPhoto( const TUint8* aP, TInt aN, TInt& aO )
-        {
-        if ( Need( aO, aN, 4 ) != KErrNone )
-            {
-            return KErrCorrupt;
-            }
-        const TUint32 c = GetU32( aP + aO );
-        aO += 4;
-        if ( c == 0x37c1011cu )
-            {
-            return KErrNone;
-            }
-        if ( c != 0x1c6e1c11u )
-            {
-            return KErrCorrupt;
-            }
-        if ( Need( aO, aN, 12 ) != KErrNone )
-            {
-            return KErrCorrupt;
-            }
-        const TUint32 flags = GetU32( aP + aO );
-        aO += 4;
-        aO += 8;
-        if ( ( flags & 2 ) != 0 && SkipBytes( aP, aN, aO ) != KErrNone )
-            {
-            return KErrCorrupt;
-            }
-        if ( Need( aO, aN, 4 ) != KErrNone )
-            {
-            return KErrCorrupt;
-            }
-        aO += 4;
-        return KErrNone;
-        }
-
-    TInt SkipChatRights( const TUint8* aP, TInt aN, TInt& aO, TBool aBanned )
-        {
-        if ( Need( aO, aN, 8 ) != KErrNone )
-            {
-            return KErrCorrupt;
-            }
-        aO += 8;
-        if ( aBanned )
-            {
-            if ( Need( aO, aN, 4 ) != KErrNone )
-                {
-                return KErrCorrupt;
-                }
-            aO += 4;
-            }
-        return KErrNone;
-        }
-
-    TInt SkipInputChannel( const TUint8* aP, TInt aN, TInt& aO )
-        {
-        if ( Need( aO, aN, 4 ) != KErrNone )
-            {
-            return KErrCorrupt;
-            }
-        const TUint32 c = GetU32( aP + aO );
-        aO += 4;
-        if ( c == 0xee8c1e86u )
-            {
-            return KErrNone;
-            }
-        if ( c == 0xf35aec28u )
-            {
-            if ( Need( aO, aN, 16 ) != KErrNone )
-                {
-                return KErrCorrupt;
-                }
-            aO += 16;
-            return KErrNone;
-            }
-        if ( Need( aO, aN, 4 ) != KErrNone )
-            {
-            return KErrCorrupt;
-            }
-        const TUint32 p = GetU32( aP + aO );
-        aO += 4;
-        if ( p == 0x35a95cb9u )
-            {
-            if ( Need( aO, aN, 8 ) != KErrNone )
-                {
-                return KErrCorrupt;
-                }
-            aO += 8;
-            }
-        else if ( p == 0xdde8a54cu || p == 0x27bcbbfcu )
-            {
-            if ( Need( aO, aN, 16 ) != KErrNone )
-                {
-                return KErrCorrupt;
-                }
-            aO += 16;
-            }
-        if ( Need( aO, aN, 12 ) != KErrNone )
-            {
-            return KErrCorrupt;
-            }
-        aO += 12;
-        return KErrNone;
-        }
-
-    TInt SkipReasonVector( const TUint8* aP, TInt aN, TInt& aO )
-        {
-        if ( Need( aO, aN, 8 ) != KErrNone || GetU32( aP + aO ) != 0x1cb5c415u )
-            {
-            return KErrCorrupt;
-            }
-        const TInt n = (TInt)GetU32( aP + aO + 4 );
-        aO += 8;
-        TInt i = 0;
-        for ( i = 0; i < n; i++ )
-            {
-            if ( Need( aO, aN, 4 ) != KErrNone )
-                {
-                return KErrCorrupt;
-                }
-            aO += 4;
-            if ( SkipBytes( aP, aN, aO ) != KErrNone ||
-                 SkipBytes( aP, aN, aO ) != KErrNone ||
-                 SkipBytes( aP, aN, aO ) != KErrNone )
-                {
-                return KErrCorrupt;
-                }
-            }
-        return KErrNone;
-        }
-
-    TInt SkipUsernameVector( const TUint8* aP, TInt aN, TInt& aO )
-        {
-        if ( Need( aO, aN, 8 ) != KErrNone || GetU32( aP + aO ) != 0x1cb5c415u )
-            {
-            return KErrCorrupt;
-            }
-        const TInt n = (TInt)GetU32( aP + aO + 4 );
-        aO += 8;
-        TInt i = 0;
-        for ( i = 0; i < n; i++ )
-            {
-            if ( Need( aO, aN, 8 ) != KErrNone )
-                {
-                return KErrCorrupt;
-                }
-            aO += 8;
-            if ( SkipBytes( aP, aN, aO ) != KErrNone )
-                {
-                return KErrCorrupt;
-                }
-            }
-        return KErrNone;
-        }
-
     TBool IsChatCtor( TUint32 aC )
         {
         return aC == 0x41cbf256u || aC == 0x83259464u || aC == 0x8261ac61u ||
@@ -975,7 +827,29 @@ namespace
         return aC == 0xabb5f120u || aC == 0x8f97c628u || aC == 0xd3bc4c2au;
         }
 
-    TBool ConsumeChat( const TUint8* aP, TInt aN, TInt& aO, TPeerName& aOut )
+    void SkipToNextPeer( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        while ( aO + 4 <= aN )
+            {
+            const TUint32 c = GetU32( aP + aO );
+            if ( IsChatCtor( c ) || IsUserCtor( c ) )
+                {
+                return;
+                }
+            if ( c == 0x1cb5c415u && aO + 12 <= aN )
+                {
+                const TUint32 next = GetU32( aP + aO + 8 );
+                if ( IsChatCtor( next ) || IsUserCtor( next ) )
+                    {
+                    return;
+                    }
+                }
+            aO += 4;
+            }
+        }
+
+    SYMGRAM_NOINLINE TBool ConsumeChat( const TUint8* aP, TInt aN, TInt& aO,
+                                        TPeerName& aOut )
         {
         aOut.iId = 0;
         aOut.iHash = 0;
@@ -1052,17 +926,15 @@ namespace
             aO = start;
             return EFalse;
             }
-        if ( Need( aO, aN, 12 ) != KErrNone )
+        if ( Need( aO, aN, c == 0x83259464u ? 16 : 12 ) != KErrNone )
             {
             aO = start;
             return EFalse;
             }
         const TUint32 flags = GetU32( aP + aO );
         aO += 4;
-        TUint32 flags2 = 0;
         if ( c == 0x83259464u )
             {
-            flags2 = GetU32( aP + aO );
             aO += 4;
             }
         aOut.iId = (TInt64)GetU64( aP + aO );
@@ -1090,90 +962,7 @@ namespace
             aO = start;
             return EFalse;
             }
-        if ( c != 0x41cbf256u && ( flags & ( 1u << 6 ) ) != 0 &&
-             SkipBytes( aP, aN, aO ) != KErrNone )
-            {
-            aO = start;
-            return EFalse;
-            }
-        if ( SkipChatPhoto( aP, aN, aO ) != KErrNone )
-            {
-            aO = start;
-            return EFalse;
-            }
-        if ( c == 0x41cbf256u )
-            {
-            if ( Need( aO, aN, 12 ) != KErrNone )
-                {
-                aO = start;
-                return EFalse;
-                }
-            aO += 12;
-            if ( ( flags & ( 1u << 6 ) ) != 0 &&
-                 SkipInputChannel( aP, aN, aO ) != KErrNone )
-                {
-                aO = start;
-                return EFalse;
-                }
-            if ( ( flags & ( 1u << 14 ) ) != 0 &&
-                 SkipChatRights( aP, aN, aO, EFalse ) != KErrNone )
-                {
-                aO = start;
-                return EFalse;
-                }
-            if ( ( flags & ( 1u << 18 ) ) != 0 &&
-                 SkipChatRights( aP, aN, aO, ETrue ) != KErrNone )
-                {
-                aO = start;
-                return EFalse;
-                }
-            return ETrue;
-            }
-        if ( Need( aO, aN, 4 ) != KErrNone )
-            {
-            aO = start;
-            return EFalse;
-            }
-        aO += 4;
-        if ( ( flags & ( 1u << 9 ) ) != 0 &&
-             SkipReasonVector( aP, aN, aO ) != KErrNone )
-            {
-            aO = start;
-            return EFalse;
-            }
-        if ( ( flags & ( 1u << 14 ) ) != 0 &&
-             SkipChatRights( aP, aN, aO, EFalse ) != KErrNone )
-            {
-            aO = start;
-            return EFalse;
-            }
-        if ( ( flags & ( 1u << 15 ) ) != 0 &&
-             SkipChatRights( aP, aN, aO, ETrue ) != KErrNone )
-            {
-            aO = start;
-            return EFalse;
-            }
-        if ( ( flags & ( 1u << 18 ) ) != 0 &&
-             SkipChatRights( aP, aN, aO, ETrue ) != KErrNone )
-            {
-            aO = start;
-            return EFalse;
-            }
-        if ( ( flags & ( 1u << 17 ) ) != 0 )
-            {
-            if ( Need( aO, aN, 4 ) != KErrNone )
-                {
-                aO = start;
-                return EFalse;
-                }
-            aO += 4;
-            }
-        if ( ( flags2 & 1u ) != 0 &&
-             SkipUsernameVector( aP, aN, aO ) != KErrNone )
-            {
-            aO = start;
-            return EFalse;
-            }
+        SkipToNextPeer( aP, aN, aO );
         return ETrue;
         }
 
@@ -1255,6 +1044,57 @@ namespace
             return 0;
             }
         return dc;
+        }
+
+    TInt FloodWaitSec( const TDesC8& aText )
+        {
+        _LIT8( KFlood, "FLOOD_WAIT_" );
+        if ( aText.Length() <= KFlood().Length() ||
+             aText.Left( KFlood().Length() ) != KFlood )
+            {
+            return 0;
+            }
+        TInt sec = 0;
+        TLex8 lex( aText.Mid( KFlood().Length() ) );
+        if ( lex.Val( sec ) != KErrNone || sec < 1 )
+            {
+            return 0;
+            }
+        return sec;
+        }
+
+    void FormatFlood( TInt aSec, TDes& aOut )
+        {
+        aOut.Zero();
+        _LIT( KWait, "Ждите " );
+        aOut.Copy( KWait );
+        const TInt h = aSec / 3600;
+        const TInt m = ( aSec % 3600 ) / 60;
+        if ( h > 0 )
+            {
+            aOut.AppendNum( h );
+            _LIT( KH, "ч" );
+            aOut.Append( KH );
+            if ( m > 0 )
+                {
+                aOut.Append( ' ' );
+                aOut.AppendNum( m );
+                _LIT( KM, "м" );
+                aOut.Append( KM );
+                }
+            }
+        else if ( m > 0 )
+            {
+            aOut.AppendNum( m );
+            _LIT( KMin, " мин" );
+            aOut.Append( KMin );
+            }
+        else
+            {
+            aOut.AppendNum( aSec );
+            _LIT( KS, "с" );
+            aOut.Append( KS );
+            }
         }
 
     void FormatHm( TInt aUnix, TDes& aOut )
@@ -2244,7 +2084,7 @@ namespace
 
     _LIT8( KDevice, "Nokia N95 8GB" );
     _LIT8( KSystem, "Symbian OS 9.2" );
-    _LIT8( KAppVer, "0.2.10" );
+    _LIT8( KAppVer, "0.2.12" );
     _LIT8( KLang, "ru" );
     _LIT8( KLangPack, "" );
 
@@ -2302,6 +2142,7 @@ CSymgramSession::CSymgramSession( MSymgramSessionObserver& aObserver )
       iDcId( 2 ),
       iHaveSrp( EFalse ),
       iSrpTries( 0 ),
+      iFloodUntil( 0 ),
       iSrpG( 0 ),
       iSrpId( 0 ),
       iRead( NULL, 0, 0 ),
@@ -3059,6 +2900,18 @@ void CSymgramSession::ResumeConnectL()
 
 void CSymgramSession::RpcFailL( const TDesC8& aMsg )
     {
+    const TInt wait = FloodWaitSec( aMsg );
+    if ( wait > 0 )
+        {
+        iFloodUntil = UnixNow() + wait;
+        iLastRpc.Zero();
+        iPendRpc = ERpcNone;
+        iBusy = EFalse;
+        iState = EIdle;
+        iRpc = ERpcNone;
+        ReportFloodL();
+        return;
+        }
     if ( ( iRpc == ERpcFile || iRpc == ERpcSaveFile ) && IsFileMigrate( aMsg ) )
         {
         ClearSave();
@@ -3764,7 +3617,7 @@ void CSymgramSession::RunL()
         }
     }
 
-TInt CSymgramSession::UnixNow() const
+    TInt CSymgramSession::UnixNow() const
     {
     TTime now;
     now.UniversalTime();
@@ -3777,6 +3630,18 @@ TInt CSymgramSession::UnixNow() const
         return 0;
         }
     return (TInt)( us / 1000000 );
+    }
+
+void CSymgramSession::ReportFloodL()
+    {
+    TInt left = iFloodUntil - UnixNow();
+    if ( left < 1 )
+        {
+        left = 1;
+        }
+    TBuf<40> text;
+    FormatFlood( left, text );
+    iObserver.SessionErrorL( text );
     }
 
 TUint64 CSymgramSession::MessageId()
@@ -4556,6 +4421,11 @@ void CSymgramSession::SendEncryptedL( const TDesC8& aMsg )
 
 void CSymgramSession::SendSendCodeL()
     {
+    if ( iFloodUntil > UnixNow() )
+        {
+        ReportFloodL();
+        return;
+        }
     TBuf8<256> query;
     PutU32( query, KSendCode );
     TlAppendBytes( query, iPhone.Ptr(), iPhone.Length() );
@@ -4640,6 +4510,11 @@ void CSymgramSession::SendGetPasswordL()
 
 void CSymgramSession::SendGetDialogsL()
     {
+    if ( iFloodUntil > UnixNow() )
+        {
+        ReportFloodL();
+        return;
+        }
     TBuf8<48> query;
     PutU32( query, KGetDialogs );
     PutU32( query, 0 );

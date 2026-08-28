@@ -143,6 +143,7 @@ class CSymgramSession : public CActive
         void StopPbkdf();
         void HandlePasswordL( const TUint8* aP, TInt aLen );
         void SendEncryptedL( const TDesC8& aMsg );
+        void ReportFloodL();
         void ReadMoreL();
         void EnsureInL( TInt aNeed );
         void HandleIncomingL();
@@ -213,6 +214,7 @@ class CSymgramSession : public CActive
         TBuf8<256> iSrpB;
         TBuf8<192> iPwdUtf;
         TInt iSrpTries;
+        TInt iFloodUntil;
 
         TInt64 iPeerId;
         TInt iPeerKind;

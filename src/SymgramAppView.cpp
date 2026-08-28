@@ -916,7 +916,7 @@ TKeyResponse CSymgramAppView::OfferKeyEventL( const TKeyEvent& aKeyEvent,
                         }
                     else if ( iSelected == 3 )
                         {
-                        _LIT( KAbout, "Symgram 0.2.10" );
+                        _LIT( KAbout, "Symgram 0.2.12" );
                         SetStatusL( KAbout );
                         }
                     }
