@@ -19,6 +19,18 @@ rls_string STRING_r_symgram_menu_next "Далее"
 //d:Options menu, cycles the calling-code country.
 rls_string STRING_r_symgram_menu_country "Страна"
 
+rls_string STRING_r_symgram_menu_write "Написать"
+rls_string STRING_r_symgram_menu_emoji "Эмодзи"
+rls_string STRING_r_symgram_menu_photo "Фото"
+rls_string STRING_r_symgram_menu_open "Открыть"
+rls_string STRING_r_symgram_menu_save "Сохранить"
+rls_string STRING_r_symgram_menu_refresh "Обновить"
+rls_string STRING_r_symgram_menu_contacts "Контакты"
+rls_string STRING_r_symgram_menu_settings "Настройки"
+rls_string STRING_r_symgram_menu_logout "Выйти"
+
+rls_string STRING_r_symgram_send_prompt "Сообщение"
+
 //d:Body of the about note, shown under the name and version.
 rls_string STRING_r_symgram_about_text "Клиент Telegram для Symbian 9.2"
 
@@ -50,7 +62,7 @@ rls_string STRING_r_symgram_code_hint "Введите код из приложе
 rls_string STRING_r_symgram_password_prompt "Облачный пароль"
 
 //d:Hint under the cloud-password field: characters are shown, not masked.
-rls_string STRING_r_symgram_password_hint "Символы видны при вводе"
+rls_string STRING_r_symgram_password_hint "Буквы, цифры, символы. # — регистр"
 
 rls_string STRING_r_symgram_cc_ru "Россия"
 rls_string STRING_r_symgram_cc_by "Беларусь"
@@ -65,6 +77,9 @@ rls_string STRING_r_symgram_cc_fi "Финляндия"
 rls_string STRING_r_symgram_empty_title "Чатов нет"
 
 //d:Explanation under the empty list title.
-rls_string STRING_r_symgram_empty_detail "Переписка появится здесь"
+rls_string STRING_r_symgram_empty_detail "Чаты сохраняются на телефоне"
+
+//d:Placeholder inside a chat until message history is fetched.
+rls_string STRING_r_symgram_chat_hint "Центр — написать. C — назад."
 
 rls_string STRING_r_symgram_loc_resource_file "\\resource\\apps\\Symgram"

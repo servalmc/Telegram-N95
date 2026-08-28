@@ -854,6 +854,73 @@ namespace
         }
     }
 
+void BnExpMsb( const TUint32* aExp, TInt aLimbs, TInt& aLimb, TInt& aBit )
+    {
+    aLimb = 0;
+    aBit = 0;
+    if ( !aExp || aLimbs < 1 )
+        {
+        return;
+        }
+    TInt limb = aLimbs - 1;
+    while ( limb > 0 && aExp[ limb ] == 0 )
+        {
+        limb--;
+        }
+    TInt bit = 31;
+    while ( bit > 0 && ( aExp[ limb ] & ( 1u << bit ) ) == 0 )
+        {
+        bit--;
+        }
+    aLimb = limb;
+    aBit = bit;
+    }
+
+void BnExpBegin( TBn& aAcc, TBn& aBaseM, TUint32& aN0inv,
+                 const TBn& aBase, const TBn& aMod )
+    {
+    aN0inv = MontInv32( aMod.iD[ 0 ] );
+    ToMont( aBaseM, aBase, aMod, aN0inv );
+    TBn one;
+    one.Zero();
+    one.iD[ 0 ] = 1;
+    ToMont( aAcc, one, aMod, aN0inv );
+    }
+
+TBool BnExpStep( TBn& aAcc, const TBn& aBaseM, const TBn& aMod, TUint32 aN0inv,
+                 const TUint32* aExp, TInt& aLimb, TInt& aBit, TInt aBudget )
+    {
+    TInt n = 0;
+    TBn sq;
+    TBn mul;
+    while ( n < aBudget && aLimb >= 0 )
+        {
+        MontMul( sq, aAcc, aAcc, aMod, aN0inv );
+        Mem::Copy( aAcc.iD, sq.iD, sizeof( aAcc.iD ) );
+        if ( aExp[ aLimb ] & ( 1u << aBit ) )
+            {
+            MontMul( mul, aAcc, aBaseM, aMod, aN0inv );
+            Mem::Copy( aAcc.iD, mul.iD, sizeof( aAcc.iD ) );
+            }
+        n++;
+        aBit--;
+        if ( aBit < 0 )
+            {
+            aBit = 31;
+            aLimb--;
+            }
+        }
+    return aLimb < 0;
+    }
+
+void BnExpFinish( TBn& aOut, const TBn& aAcc, const TBn& aMod, TUint32 aN0inv )
+    {
+    TBn ident;
+    ident.Zero();
+    ident.iD[ 0 ] = 1;
+    MontMul( aOut, aAcc, ident, aMod, aN0inv );
+    }
+
 void BnModExp( TBn& aOut, const TBn& aBase, const TBn& aExp, const TBn& aMod )
     {
     BnModExpN( aOut, aBase, aExp.iD, KBnLimbs, aMod );
@@ -863,7 +930,9 @@ void BnModExpN( TBn& aOut, const TBn& aBase,
                 const TUint32* aExp, TInt aExpLimbs, const TBn& aMod )
     {
     const TUint32 n0inv = MontInv32( aMod.iD[ 0 ] );
-    TBn baseM, acc, one;
+    TBn baseM;
+    TBn acc;
+    TBn one;
     ToMont( baseM, aBase, aMod, n0inv );
     one.Zero();
     one.iD[ 0 ] = 1;
@@ -877,12 +946,12 @@ void BnModExpN( TBn& aOut, const TBn& aBase,
             {
             TBn sq;
             MontMul( sq, acc, acc, aMod, n0inv );
-            acc = sq;
+            Mem::Copy( acc.iD, sq.iD, sizeof( acc.iD ) );
             if ( aExp[ i ] & ( 1u << b ) )
                 {
                 TBn m;
                 MontMul( m, acc, baseM, aMod, n0inv );
-                acc = m;
+                Mem::Copy( acc.iD, m.iD, sizeof( acc.iD ) );
                 }
             }
         }

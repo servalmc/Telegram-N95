@@ -1,12 +1,24 @@
 #include <random.h>
 #include <e32err.h>
+#include <e32std.h>
+#include <hal.h>
+#include <hal_data.h>
 
 #include "SymgramSession.h"
 #include "SymgramApi.h"
 
 namespace
     {
-    const TUint32 KDc2 = INET_ADDR( 149, 154, 167, 51 );
+    const TUint32 KDcAddr[] =
+        {
+        0,
+        INET_ADDR( 149, 154, 175, 53 ),
+        INET_ADDR( 149, 154, 167, 51 ),
+        INET_ADDR( 149, 154, 175, 100 ),
+        INET_ADDR( 149, 154, 167, 91 ),
+        INET_ADDR( 91, 108, 56, 165 )
+        };
+    const TInt KDcMax = 5;
     const TUint KDcPort = 443;
     const TUint32 KReqPqMulti = 0xbe7e8ef1u;
     const TUint32 KResPq = 0x05162463u;
@@ -39,14 +51,69 @@ namespace
     const TUint32 KCheckPassword = 0xd18b4d16u;
     const TUint32 KInputSrp = 0xd27ff082u;
     const TUint32 KGetDialogs = 0xa0f4cb4fu;
+    const TUint32 KGetHistory = 0x4423e6c5u;
+    const TUint32 KSendMessage = 0x1cc20387u;
+    const TUint32 KGetFile = 0xbe5335beu;
+    const TUint32 KSaveFilePart = 0xb304a621u;
+    const TUint32 KSendMedia = 0x7547c966u;
+    const TUint32 KInputFile = 0xf52ff27fu;
+    const TUint32 KInputMediaPhoto = 0x1e287d04u;
+    const TUint32 KInputMediaDoc = 0x5b38c6c1u;
+    const TUint32 KDocAttrName = 0x15590068u;
+    const TUint32 KBoolTrue = 0x997275b5u;
+    const TUint32 KBoolFalse = 0xbc799737u;
+    const TInt KUploadChunk = 8192;
+    const TInt KUploadMax = 524288;
+    const TUint32 KMessages = 0x8c718e87u;
+    const TUint32 KMessagesSlice = 0x3a54685eu;
+    const TUint32 KChannelMsgs = 0xc776ba4eu;
+    const TUint32 KUploadFile = 0x096a18d5u;
+    const TUint32 KUploadFileCdn = 0xf18cda44u;
+    const TInt KDownloadChunk = 32768;
+    const TInt KDownloadMax = 2097152;
+    // LAYER 158 (tdesktop v4.8.3). A wrong Updates ctor after sendMessage
+    // used to hit FailTextL, which closed the socket from RunL.
+    const TUint32 KUpdShortSent = 0x9015e101u;
+    const TUint32 KUpdates = 0x74ae4240u;
+    const TUint32 KUpdatesComb = 0x725b04c3u;
+    const TUint32 KUpdateShort = 0x78d4dec1u;
+    const TUint32 KUpdShortMsg = 0x313bc7f8u;
+    const TUint32 KUpdShortChat = 0x4d6deea5u;
+    const TUint32 KUpdatesTooLong = 0xe317af7eu;
+    const TUint32 KInputPeerUser = 0xdde8a54cu;
+    const TUint32 KInputPeerChat = 0x35a95cb9u;
+    const TUint32 KInputPeerChan = 0x27bcbbfcu;
+    const TUint32 KInputPhotoLoc = 0x40181ffeu;
+    const TUint32 KInputDocLoc = 0xbad07584u;
+    const TUint32 KGetContacts = 0x5dd69e12u;
+    const TUint32 KContacts = 0xeae87e42u;
+    const TUint32 KContactsOld = 0x6f8b8cb4u;
+    const TUint32 KContactsNotMod = 0xb74ba9d2u;
+    const TUint32 KContact = 0x145ade0cu;
+    const TUint32 KContactOld = 0xf911c994u;
     const TUint32 KInputPeerEmpty = 0x7f3b18eau;
     const TUint32 KDialogs = 0x15ba6c40u;
     const TUint32 KDialogsSlice = 0x71e094f3u;
     const TUint32 KTlVector = 0x1cb5c415u;
-    const TInt KDcId = 2;
+    const TUint32 KSessionMagic = 0x01534753u;
     const TInt KLayer = 158;
     const TInt KPbkdfIters = 100000;
-    const TInt KPbkdfChunk = 8;
+    const TInt KPbkdfChunk = 48;
+    const TInt KSrpBitBudget = 12;
+    const TInt KMaxIn = 65536;
+
+    struct TDhWork
+        {
+        TBn iP;
+        TBn iG;
+        TBn iB;
+        TBn iGa;
+        TBn iGb;
+        TBn iAk;
+        TUint8 iBbytes[ 256 ];
+        TUint8 iAkb[ 256 ];
+        TUint8 iGbb[ 256 ];
+        };
 
     TUint32 GetU32( const TUint8* aP )
         {
@@ -73,6 +140,122 @@ namespace
     TUint64 GetU64( const TUint8* aP )
         {
         return (TUint64)GetU32( aP ) | ( (TUint64)GetU32( aP + 4 ) << 32 );
+        }
+
+    void Md5( const TUint8* aData, TInt aLen, TUint8 aOut[ 16 ] )
+        {
+        static const TUint32 K[ 64 ] =
+            {
+            0xd76aa478u, 0xe8c7b756u, 0x242070dbu, 0xc1bdceeeu,
+            0xf57c0fafu, 0x4787c62au, 0xa8304613u, 0xfd469501u,
+            0x698098d8u, 0x8b44f7afu, 0xffff5bb1u, 0x895cd7beu,
+            0x6b901122u, 0xfd987193u, 0xa679438eu, 0x49b40821u,
+            0xf61e2562u, 0xc040b340u, 0x265e5a51u, 0xe9b6c7aau,
+            0xd62f105du, 0x02441453u, 0xd8a1e681u, 0xe7d3fbc8u,
+            0x21e1cde6u, 0xc33707d6u, 0xf4d50d87u, 0x455a14edu,
+            0xa9e3e905u, 0xfcefa3f8u, 0x676f02d9u, 0x8d2a4c8au,
+            0xfffa3942u, 0x8771f681u, 0x6d9d6122u, 0xfde5380cu,
+            0xa4beea44u, 0x4bdecfa9u, 0xf6bb4b60u, 0xbebfbc70u,
+            0x289b7ec6u, 0xeaa127fau, 0xd4ef3085u, 0x04881d05u,
+            0xd9d4d039u, 0xe6db99e5u, 0x1fa27cf8u, 0xc4ac5665u,
+            0xf4292244u, 0x432aff97u, 0xab9423a7u, 0xfc93a039u,
+            0x655b59c3u, 0x8f0ccc92u, 0xffeff47du, 0x85845dd1u,
+            0x6fa87e4fu, 0xfe2ce6e0u, 0xa3014314u, 0x4e0811a1u,
+            0xf7537e82u, 0xbd3af235u, 0x2ad7d2bbu, 0xeb86d391u
+            };
+        static const TInt S[ 64 ] =
+            {
+            7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+            5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20, 5, 9, 14, 20,
+            4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+            6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+            };
+        TUint32 a0 = 0x67452301u;
+        TUint32 b0 = 0xefcdab89u;
+        TUint32 c0 = 0x98badcfeu;
+        TUint32 d0 = 0x10325476u;
+        const TInt bitLen = aLen * 8;
+        const TInt padLen = ( ( aLen + 8 ) / 64 + 1 ) * 64;
+        HBufC8* buf = HBufC8::New( padLen );
+        if ( !buf )
+            {
+            Mem::FillZ( aOut, 16 );
+            return;
+            }
+        TPtr8 p = buf->Des();
+        p.FillZ( padLen );
+        Mem::Copy( const_cast<TUint8*>( p.Ptr() ), aData, aLen );
+        const_cast<TUint8*>( p.Ptr() )[ aLen ] = 0x80;
+        TUint8* raw = const_cast<TUint8*>( p.Ptr() );
+        raw[ padLen - 8 ] = (TUint8)bitLen;
+        raw[ padLen - 7 ] = (TUint8)( bitLen >> 8 );
+        raw[ padLen - 6 ] = (TUint8)( bitLen >> 16 );
+        raw[ padLen - 5 ] = (TUint8)( bitLen >> 24 );
+        TInt off = 0;
+        for ( off = 0; off < padLen; off += 64 )
+            {
+            TUint32 w[ 16 ];
+            TInt i = 0;
+            for ( i = 0; i < 16; i++ )
+                {
+                w[ i ] = GetU32( raw + off + i * 4 );
+                }
+            TUint32 a = a0;
+            TUint32 b = b0;
+            TUint32 c = c0;
+            TUint32 d = d0;
+            for ( i = 0; i < 64; i++ )
+                {
+                TUint32 f = 0;
+                TInt g = 0;
+                if ( i < 16 )
+                    {
+                    f = ( b & c ) | ( ( ~b ) & d );
+                    g = i;
+                    }
+                else if ( i < 32 )
+                    {
+                    f = ( d & b ) | ( ( ~d ) & c );
+                    g = ( 5 * i + 1 ) % 16;
+                    }
+                else if ( i < 48 )
+                    {
+                    f = b ^ c ^ d;
+                    g = ( 3 * i + 5 ) % 16;
+                    }
+                else
+                    {
+                    f = c ^ ( b | ( ~d ) );
+                    g = ( 7 * i ) % 16;
+                    }
+                f = f + a + K[ i ] + w[ g ];
+                a = d;
+                d = c;
+                c = b;
+                b = b + ( ( f << S[ i ] ) | ( f >> ( 32 - S[ i ] ) ) );
+                }
+            a0 += a;
+            b0 += b;
+            c0 += c;
+            d0 += d;
+            }
+        delete buf;
+        aOut[ 0 ] = (TUint8)a0;
+        aOut[ 1 ] = (TUint8)( a0 >> 8 );
+        aOut[ 2 ] = (TUint8)( a0 >> 16 );
+        aOut[ 3 ] = (TUint8)( a0 >> 24 );
+        aOut[ 4 ] = (TUint8)b0;
+        aOut[ 5 ] = (TUint8)( b0 >> 8 );
+        aOut[ 6 ] = (TUint8)( b0 >> 16 );
+        aOut[ 7 ] = (TUint8)( b0 >> 24 );
+        aOut[ 8 ] = (TUint8)c0;
+        aOut[ 9 ] = (TUint8)( c0 >> 8 );
+        aOut[ 10 ] = (TUint8)( c0 >> 16 );
+        aOut[ 11 ] = (TUint8)( c0 >> 24 );
+        aOut[ 12 ] = (TUint8)d0;
+        aOut[ 13 ] = (TUint8)( d0 >> 8 );
+        aOut[ 14 ] = (TUint8)( d0 >> 16 );
+        aOut[ 15 ] = (TUint8)( d0 >> 24 );
         }
 
     TInt32 GetI32( const TUint8* aP )
@@ -112,16 +295,32 @@ namespace
                 }
             else if ( ( c & 0xF8 ) == 0xF0 && i + 2 < aIn.Length() )
                 {
+                cp = ( ( c & 7 ) << 18 )
+                   | ( ( aIn[ i ] & 0x3F ) << 12 )
+                   | ( ( aIn[ i + 1 ] & 0x3F ) << 6 )
+                   | ( aIn[ i + 2 ] & 0x3F );
                 i += 3;
-                cp = '?';
                 }
             else
                 {
                 continue;
                 }
+            if ( cp == 0x200D || cp == 0x20E3 ||
+                 ( cp >= 0xFE00 && cp <= 0xFE0F ) ||
+                 ( cp >= 0x1F3FB && cp <= 0x1F3FF ) ||
+                 ( cp >= 0xE0020 && cp <= 0xE007F ) )
+                {
+                continue;
+                }
             if ( cp > 0xFFFF )
                 {
-                cp = '?';
+                if ( aOut.Length() + 2 <= aOut.MaxLength() )
+                    {
+                    const TUint u = cp - 0x10000;
+                    aOut.Append( (TText)( 0xD800 | ( u >> 10 ) ) );
+                    aOut.Append( (TText)( 0xDC00 | ( u & 0x3FF ) ) );
+                    }
+                continue;
                 }
             aOut.Append( (TText)cp );
             }
@@ -261,6 +460,740 @@ namespace
         return KErrNone;
         }
 
+    struct TPeerName
+        {
+        TInt64 iId;
+        TInt64 iHash;
+        TInt iKind;
+        TBuf<40> iName;
+        TBool iSelf;
+        TBool iDeleted;
+        };
+
+    TInt SkipUserPhoto( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0x4f11bae1u )
+            {
+            return KErrNone;
+            }
+        if ( Need( aO, aN, 12 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 flags = GetU32( aP + aO );
+        aO += 4;
+        aO += 8;
+        if ( ( flags & 2 ) != 0 && SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        return KErrNone;
+        }
+
+    TInt SkipUserStatus( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0x09d05049u )
+            {
+            return KErrNone;
+            }
+        if ( c == 0xedb93949u || c == 0x008c703fu )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            return KErrNone;
+            }
+        if ( c == 0xe26f42f1u || c == 0x07bf09fcu || c == 0x77ebc742u ||
+             c == 0x65899777u )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            return KErrNone;
+            }
+        return KErrNone;
+        }
+
+    TInt SkipPeerColor( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 8 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        const TUint32 flags = GetU32( aP + aO );
+        aO += 4;
+        if ( ( flags & 1 ) != 0 )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            }
+        if ( ( flags & 2 ) != 0 )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 8;
+            }
+        return KErrNone;
+        }
+
+    TInt SkipUserTail( const TUint8* aP, TInt aN, TInt& aO,
+                       TUint32 aFlags, TUint32 aFlags2 )
+        {
+        if ( ( aFlags & ( 1u << 5 ) ) != 0 &&
+             SkipUserPhoto( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( aFlags & ( 1u << 6 ) ) != 0 &&
+             SkipUserStatus( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( aFlags & ( 1u << 14 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            }
+        if ( ( aFlags & ( 1u << 18 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone ||
+                 GetU32( aP + aO ) != 0x1cb5c415u )
+                {
+                return KErrCorrupt;
+                }
+            const TInt n = (TInt)GetU32( aP + aO + 4 );
+            aO += 8;
+            TInt i = 0;
+            for ( i = 0; i < n; i++ )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 4;
+                if ( SkipBytes( aP, aN, aO ) != KErrNone ||
+                     SkipBytes( aP, aN, aO ) != KErrNone ||
+                     SkipBytes( aP, aN, aO ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                }
+            }
+        if ( ( aFlags & ( 1u << 19 ) ) != 0 &&
+             SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( aFlags & ( 1u << 22 ) ) != 0 &&
+             SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( aFlags & ( 1u << 30 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            const TUint32 c = GetU32( aP + aO );
+            aO += 4;
+            if ( c == 0x718d5f4cu )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                const TUint32 fl = GetU32( aP + aO );
+                aO += 4;
+                if ( Need( aO, aN, 8 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 8;
+                if ( ( fl & 1 ) != 0 )
+                    {
+                    if ( Need( aO, aN, 4 ) != KErrNone )
+                        {
+                        return KErrCorrupt;
+                        }
+                    aO += 4;
+                    }
+                }
+            else
+                {
+                if ( Need( aO, aN, 8 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 8;
+                if ( c == 0xedfd405fu )
+                    {
+                    if ( Need( aO, aN, 4 ) != KErrNone )
+                        {
+                        return KErrCorrupt;
+                        }
+                    aO += 4;
+                    }
+                }
+            }
+        if ( ( aFlags2 & 1 ) != 0 )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone ||
+                 GetU32( aP + aO ) != 0x1cb5c415u )
+                {
+                return KErrCorrupt;
+                }
+            const TInt n = (TInt)GetU32( aP + aO + 4 );
+            aO += 8;
+            TInt i = 0;
+            for ( i = 0; i < n; i++ )
+                {
+                if ( Need( aO, aN, 8 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 4;
+                aO += 4;
+                if ( SkipBytes( aP, aN, aO ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                }
+            }
+        if ( ( aFlags2 & ( 1u << 5 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            }
+        if ( ( aFlags2 & ( 1u << 8 ) ) != 0 &&
+             SkipPeerColor( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( aFlags2 & ( 1u << 9 ) ) != 0 &&
+             SkipPeerColor( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        return KErrNone;
+        }
+
+    TBool ConsumeUser( const TUint8* aP, TInt aN, TInt& aO, TPeerName& aOut )
+        {
+        aOut.iId = 0;
+        aOut.iHash = 0;
+        aOut.iKind = 1;
+        aOut.iName.Zero();
+        aOut.iSelf = EFalse;
+        aOut.iDeleted = EFalse;
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return EFalse;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        if ( c == 0xd3bc4c2au )
+            {
+            if ( Need( aO, aN, 12 ) != KErrNone )
+                {
+                return EFalse;
+                }
+            aO += 4;
+            aOut.iId = (TInt64)GetU64( aP + aO );
+            aO += 8;
+            aOut.iDeleted = ETrue;
+            return ETrue;
+            }
+        if ( c != 0xabb5f120u && c != 0x8f97c628u )
+            {
+            return EFalse;
+            }
+        if ( Need( aO, aN, 16 ) != KErrNone )
+            {
+            return EFalse;
+            }
+        aO += 4;
+        const TUint32 flags = GetU32( aP + aO );
+        aO += 4;
+        const TUint32 flags2 = GetU32( aP + aO );
+        aO += 4;
+        aOut.iId = (TInt64)GetU64( aP + aO );
+        aO += 8;
+        aOut.iSelf = ( flags & ( 1u << 10 ) ) != 0;
+        aOut.iDeleted = ( flags & ( 1u << 13 ) ) != 0;
+        if ( ( flags & 1 ) != 0 )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return EFalse;
+                }
+            aOut.iHash = (TInt64)GetU64( aP + aO );
+            aO += 8;
+            }
+        TBuf<40> first;
+        TBuf<40> last;
+        if ( ( flags & 2 ) != 0 && ReadStr( aP, aN, aO, first ) != KErrNone )
+            {
+            return EFalse;
+            }
+        if ( ( flags & 4 ) != 0 && ReadStr( aP, aN, aO, last ) != KErrNone )
+            {
+            return EFalse;
+            }
+        aOut.iName.Copy( first );
+        if ( last.Length() > 0 &&
+             aOut.iName.Length() + 1 + last.Length() <= aOut.iName.MaxLength() )
+            {
+            aOut.iName.Append( ' ' );
+            aOut.iName.Append( last );
+            }
+        if ( ( flags & 8 ) != 0 )
+            {
+            TBuf<40> user;
+            if ( ReadStr( aP, aN, aO, user ) != KErrNone )
+                {
+                return EFalse;
+                }
+            if ( aOut.iName.Length() == 0 )
+                {
+                aOut.iName.Copy( user );
+                }
+            }
+        if ( ( flags & 16 ) != 0 )
+            {
+            TBuf<40> phone;
+            if ( ReadStr( aP, aN, aO, phone ) != KErrNone )
+                {
+                return EFalse;
+                }
+            if ( aOut.iName.Length() == 0 )
+                {
+                aOut.iName.Copy( phone );
+                }
+            }
+        if ( SkipUserTail( aP, aN, aO, flags, flags2 ) != KErrNone )
+            {
+            return EFalse;
+            }
+        return ETrue;
+        }
+
+    TInt SkipChatPhoto( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0x37c1011cu )
+            {
+            return KErrNone;
+            }
+        if ( c != 0x1c6e1c11u )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, 12 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 flags = GetU32( aP + aO );
+        aO += 4;
+        aO += 8;
+        if ( ( flags & 2 ) != 0 && SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        return KErrNone;
+        }
+
+    TInt SkipChatRights( const TUint8* aP, TInt aN, TInt& aO, TBool aBanned )
+        {
+        if ( Need( aO, aN, 8 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 8;
+        if ( aBanned )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            }
+        return KErrNone;
+        }
+
+    TInt SkipInputChannel( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0xee8c1e86u )
+            {
+            return KErrNone;
+            }
+        if ( c == 0xf35aec28u )
+            {
+            if ( Need( aO, aN, 16 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 16;
+            return KErrNone;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 p = GetU32( aP + aO );
+        aO += 4;
+        if ( p == 0x35a95cb9u )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 8;
+            }
+        else if ( p == 0xdde8a54cu || p == 0x27bcbbfcu )
+            {
+            if ( Need( aO, aN, 16 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 16;
+            }
+        if ( Need( aO, aN, 12 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 12;
+        return KErrNone;
+        }
+
+    TInt SkipReasonVector( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 8 ) != KErrNone || GetU32( aP + aO ) != 0x1cb5c415u )
+            {
+            return KErrCorrupt;
+            }
+        const TInt n = (TInt)GetU32( aP + aO + 4 );
+        aO += 8;
+        TInt i = 0;
+        for ( i = 0; i < n; i++ )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            if ( SkipBytes( aP, aN, aO ) != KErrNone ||
+                 SkipBytes( aP, aN, aO ) != KErrNone ||
+                 SkipBytes( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            }
+        return KErrNone;
+        }
+
+    TInt SkipUsernameVector( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 8 ) != KErrNone || GetU32( aP + aO ) != 0x1cb5c415u )
+            {
+            return KErrCorrupt;
+            }
+        const TInt n = (TInt)GetU32( aP + aO + 4 );
+        aO += 8;
+        TInt i = 0;
+        for ( i = 0; i < n; i++ )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 8;
+            if ( SkipBytes( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            }
+        return KErrNone;
+        }
+
+    TBool IsChatCtor( TUint32 aC )
+        {
+        return aC == 0x41cbf256u || aC == 0x83259464u || aC == 0x8261ac61u ||
+               aC == 0x6592a1a7u || aC == 0x17d493d5u || aC == 0x29562865u;
+        }
+
+    TBool IsUserCtor( TUint32 aC )
+        {
+        return aC == 0xabb5f120u || aC == 0x8f97c628u || aC == 0xd3bc4c2au;
+        }
+
+    TBool ConsumeChat( const TUint8* aP, TInt aN, TInt& aO, TPeerName& aOut )
+        {
+        aOut.iId = 0;
+        aOut.iHash = 0;
+        aOut.iKind = 2;
+        aOut.iName.Zero();
+        aOut.iSelf = EFalse;
+        aOut.iDeleted = EFalse;
+        const TInt start = aO;
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return EFalse;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0x29562865u )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                aO = start;
+                return EFalse;
+                }
+            aOut.iId = (TInt64)GetU64( aP + aO );
+            aO += 8;
+            return ETrue;
+            }
+        if ( c == 0x6592a1a7u )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                aO = start;
+                return EFalse;
+                }
+            aOut.iId = (TInt64)GetU64( aP + aO );
+            aO += 8;
+            if ( ReadStr( aP, aN, aO, aOut.iName ) != KErrNone )
+                {
+                aO = start;
+                return EFalse;
+                }
+            return ETrue;
+            }
+        if ( c == 0x17d493d5u )
+            {
+            if ( Need( aO, aN, 28 ) != KErrNone )
+                {
+                aO = start;
+                return EFalse;
+                }
+            const TUint32 fl = GetU32( aP + aO );
+            aO += 4;
+            aOut.iId = (TInt64)GetU64( aP + aO );
+            aO += 8;
+            aOut.iHash = (TInt64)GetU64( aP + aO );
+            aO += 8;
+            aOut.iKind = ( ( fl & ( 1u << 8 ) ) != 0 ) ? 4 : 3;
+            if ( ReadStr( aP, aN, aO, aOut.iName ) != KErrNone )
+                {
+                aO = start;
+                return EFalse;
+                }
+            if ( ( fl & ( 1u << 16 ) ) != 0 )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    aO = start;
+                    return EFalse;
+                    }
+                aO += 4;
+                }
+            return ETrue;
+            }
+        if ( c != 0x41cbf256u && c != 0x83259464u && c != 0x8261ac61u )
+            {
+            aO = start;
+            return EFalse;
+            }
+        if ( Need( aO, aN, 12 ) != KErrNone )
+            {
+            aO = start;
+            return EFalse;
+            }
+        const TUint32 flags = GetU32( aP + aO );
+        aO += 4;
+        TUint32 flags2 = 0;
+        if ( c == 0x83259464u )
+            {
+            flags2 = GetU32( aP + aO );
+            aO += 4;
+            }
+        aOut.iId = (TInt64)GetU64( aP + aO );
+        aO += 8;
+        if ( c == 0x41cbf256u )
+            {
+            aOut.iKind = 2;
+            }
+        else
+            {
+            aOut.iKind = ( ( flags & ( 1u << 8 ) ) != 0 ) ? 4 : 3;
+            if ( ( flags & ( 1u << 13 ) ) != 0 )
+                {
+                if ( Need( aO, aN, 8 ) != KErrNone )
+                    {
+                    aO = start;
+                    return EFalse;
+                    }
+                aOut.iHash = (TInt64)GetU64( aP + aO );
+                aO += 8;
+                }
+            }
+        if ( ReadStr( aP, aN, aO, aOut.iName ) != KErrNone )
+            {
+            aO = start;
+            return EFalse;
+            }
+        if ( c != 0x41cbf256u && ( flags & ( 1u << 6 ) ) != 0 &&
+             SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            aO = start;
+            return EFalse;
+            }
+        if ( SkipChatPhoto( aP, aN, aO ) != KErrNone )
+            {
+            aO = start;
+            return EFalse;
+            }
+        if ( c == 0x41cbf256u )
+            {
+            if ( Need( aO, aN, 12 ) != KErrNone )
+                {
+                aO = start;
+                return EFalse;
+                }
+            aO += 12;
+            if ( ( flags & ( 1u << 6 ) ) != 0 &&
+                 SkipInputChannel( aP, aN, aO ) != KErrNone )
+                {
+                aO = start;
+                return EFalse;
+                }
+            if ( ( flags & ( 1u << 14 ) ) != 0 &&
+                 SkipChatRights( aP, aN, aO, EFalse ) != KErrNone )
+                {
+                aO = start;
+                return EFalse;
+                }
+            if ( ( flags & ( 1u << 18 ) ) != 0 &&
+                 SkipChatRights( aP, aN, aO, ETrue ) != KErrNone )
+                {
+                aO = start;
+                return EFalse;
+                }
+            return ETrue;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            aO = start;
+            return EFalse;
+            }
+        aO += 4;
+        if ( ( flags & ( 1u << 9 ) ) != 0 &&
+             SkipReasonVector( aP, aN, aO ) != KErrNone )
+            {
+            aO = start;
+            return EFalse;
+            }
+        if ( ( flags & ( 1u << 14 ) ) != 0 &&
+             SkipChatRights( aP, aN, aO, EFalse ) != KErrNone )
+            {
+            aO = start;
+            return EFalse;
+            }
+        if ( ( flags & ( 1u << 15 ) ) != 0 &&
+             SkipChatRights( aP, aN, aO, ETrue ) != KErrNone )
+            {
+            aO = start;
+            return EFalse;
+            }
+        if ( ( flags & ( 1u << 18 ) ) != 0 &&
+             SkipChatRights( aP, aN, aO, ETrue ) != KErrNone )
+            {
+            aO = start;
+            return EFalse;
+            }
+        if ( ( flags & ( 1u << 17 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                aO = start;
+                return EFalse;
+                }
+            aO += 4;
+            }
+        if ( ( flags2 & 1u ) != 0 &&
+             SkipUsernameVector( aP, aN, aO ) != KErrNone )
+            {
+            aO = start;
+            return EFalse;
+            }
+        return ETrue;
+        }
+
+    TBool NameFits( TInt aDlgKind, TInt aNameKind )
+        {
+        if ( aDlgKind <= 1 )
+            {
+            return aNameKind <= 1;
+            }
+        if ( aDlgKind == 2 )
+            {
+            return aNameKind == 2;
+            }
+        if ( aDlgKind == 3 )
+            {
+            return aNameKind == 3 || aNameKind == 4;
+            }
+        return aNameKind == aDlgKind;
+        }
+
     TInt SkipPeer( const TUint8* aP, TInt aN, TInt& aO, TInt& aKind, TInt64& aId )
         {
         if ( Need( aO, aN, 12 ) != KErrNone )
@@ -290,9 +1223,1028 @@ namespace
         return KErrNone;
         }
 
+    TInt MigrateDcFromError( const TDesC8& aText )
+        {
+        _LIT8( KPhone, "PHONE_MIGRATE_" );
+        _LIT8( KNet, "NETWORK_MIGRATE_" );
+        _LIT8( KUser, "USER_MIGRATE_" );
+        TInt skip = 0;
+        if ( aText.Length() > KPhone().Length() &&
+             aText.Left( KPhone().Length() ) == KPhone )
+            {
+            skip = KPhone().Length();
+            }
+        else if ( aText.Length() > KNet().Length() &&
+                  aText.Left( KNet().Length() ) == KNet )
+            {
+            skip = KNet().Length();
+            }
+        else if ( aText.Length() > KUser().Length() &&
+                  aText.Left( KUser().Length() ) == KUser )
+            {
+            skip = KUser().Length();
+            }
+        else
+            {
+            return 0;
+            }
+        TInt dc = 0;
+        TLex8 lex( aText.Mid( skip ) );
+        if ( lex.Val( dc ) != KErrNone || dc < 1 || dc > KDcMax )
+            {
+            return 0;
+            }
+        return dc;
+        }
+
+    void FormatHm( TInt aUnix, TDes& aOut )
+        {
+        aOut.Zero();
+        if ( aUnix <= 0 )
+            {
+            return;
+            }
+        TTime epoch;
+        _LIT( KEpoch, "19700000:000000.000000" );
+        if ( epoch.Set( KEpoch ) != KErrNone )
+            {
+            return;
+            }
+        const TTime t = epoch + TTimeIntervalSeconds( aUnix );
+        const TDateTime d = t.DateTime();
+        if ( d.Hour() < 10 )
+            {
+            aOut.Append( '0' );
+            }
+        aOut.AppendNum( d.Hour() );
+        aOut.Append( ':' );
+        if ( d.Minute() < 10 )
+            {
+            aOut.Append( '0' );
+            }
+        aOut.AppendNum( d.Minute() );
+        }
+
+    TInt SkipEntities( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 8 ) != KErrNone || GetU32( aP + aO ) != 0x1cb5c415u )
+            {
+            return KErrCorrupt;
+            }
+        const TInt n = (TInt)GetU32( aP + aO + 4 );
+        aO += 8;
+        TInt i = 0;
+        for ( i = 0; i < n; i++ )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            const TUint32 c = GetU32( aP + aO );
+            aO += 4;
+            if ( c == 0xf1ccaaacu )
+                {
+                if ( Need( aO, aN, 12 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 12;
+                continue;
+                }
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 8;
+            if ( c == 0x73924be0u || c == 0x76a6d327u )
+                {
+                if ( SkipBytes( aP, aN, aO ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                }
+            else if ( c == 0xdc7b1140u || c == 0xc8cf05f8u )
+                {
+                if ( Need( aO, aN, 8 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 8;
+                }
+            }
+        return KErrNone;
+        }
+
+    TInt SkipFwdHeader( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 8 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        const TUint32 flags = GetU32( aP + aO );
+        aO += 4;
+        TInt kind = 0;
+        TInt64 pid = 0;
+        if ( ( flags & 1u ) != 0 &&
+             SkipPeer( aP, aN, aO, kind, pid ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( flags & ( 1u << 5 ) ) != 0 &&
+             SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        if ( ( flags & ( 1u << 2 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            }
+        if ( ( flags & ( 1u << 3 ) ) != 0 &&
+             SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( flags & ( 1u << 4 ) ) != 0 )
+            {
+            if ( SkipPeer( aP, aN, aO, kind, pid ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            }
+        if ( ( flags & ( 1u << 6 ) ) != 0 &&
+             SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        return KErrNone;
+        }
+
+    TInt SkipReplyHeader( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 8 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0x9c98bfc1u || c == 0x20e82b3au )
+            {
+            if ( Need( aO, aN, 12 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 12;
+            return KErrNone;
+            }
+        const TUint32 flags = GetU32( aP + aO );
+        aO += 4;
+        TInt kind = 0;
+        TInt64 pid = 0;
+        if ( c == 0xa6d57763u )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            if ( ( flags & 1u ) != 0 &&
+                 SkipPeer( aP, aN, aO, kind, pid ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            if ( ( flags & ( 1u << 1 ) ) != 0 )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 4;
+                }
+            return KErrNone;
+            }
+        if ( ( flags & ( 1u << 4 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            }
+        if ( ( flags & 1u ) != 0 &&
+             SkipPeer( aP, aN, aO, kind, pid ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( flags & ( 1u << 1 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            }
+        if ( ( flags & ( 1u << 6 ) ) != 0 &&
+             SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( flags & ( 1u << 7 ) ) != 0 &&
+             SkipEntities( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( flags & ( 1u << 8 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            }
+        return KErrNone;
+        }
+
+    void FlattenPreview( TDes& aText )
+        {
+        TInt i = 0;
+        for ( i = 0; i < aText.Length(); i++ )
+            {
+            const TText ch = aText[ i ];
+            if ( ch == '\n' || ch == '\r' || ch == '\t' )
+                {
+                aText[ i ] = ' ';
+                }
+            }
+        while ( aText.Length() > 0 && aText[ 0 ] == ' ' )
+            {
+            aText.Delete( 0, 1 );
+            }
+        }
+
+    struct TPreview
+        {
+        TInt iId;
+        TInt iDate;
+        TBool iOut;
+        TUint8 iKind;
+        TInt iDuration;
+        TBool iPhotoLoc;
+        TInt64 iFileId;
+        TInt64 iFileHash;
+        TBuf8<96> iFileRef;
+        TBuf<40> iFileName;
+        TBuf<140> iText;
+        };
+
+    TInt SkipIntVector( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 8 ) != KErrNone || GetU32( aP + aO ) != 0x1cb5c415u )
+            {
+            return KErrCorrupt;
+            }
+        const TInt n = (TInt)GetU32( aP + aO + 4 );
+        aO += 8;
+        if ( Need( aO, aN, n * 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += n * 4;
+        return KErrNone;
+        }
+
+    TInt SkipPhotoSize( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( c == 0xe17e23cu )
+            {
+            return KErrNone;
+            }
+        if ( c == 0x75c78e60u )
+            {
+            if ( Need( aO, aN, 12 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 12;
+            return KErrNone;
+            }
+        if ( c == 0x21e1ad6u || c == 0xe0b0bc2eu || c == 0xd8214d41u )
+            {
+            if ( c == 0x21e1ad6u )
+                {
+                if ( Need( aO, aN, 8 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 8;
+                }
+            return SkipBytes( aP, aN, aO );
+            }
+        if ( c == 0xfa3efb95u )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 8;
+            return SkipIntVector( aP, aN, aO );
+            }
+        return KErrNone;
+        }
+
+    TInt SkipPhotoSizes( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 8 ) != KErrNone || GetU32( aP + aO ) != 0x1cb5c415u )
+            {
+            return KErrCorrupt;
+            }
+        const TInt n = (TInt)GetU32( aP + aO + 4 );
+        aO += 8;
+        TInt i = 0;
+        for ( i = 0; i < n; i++ )
+            {
+            if ( SkipPhotoSize( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            }
+        return KErrNone;
+        }
+
+    TInt ReadFileRef( const TUint8* aP, TInt aN, TInt& aO, TDes8& aRef )
+        {
+        const TUint8* data = NULL;
+        TInt len = 0;
+        const TInt used = TlReadBytes( aP + aO, aN - aO, data, len );
+        if ( used < 0 )
+            {
+            return KErrCorrupt;
+            }
+        aO += used;
+        aRef.Zero();
+        if ( len > 0 )
+            {
+            const TInt n = len < aRef.MaxLength() ? len : aRef.MaxLength();
+            aRef.Copy( data, n );
+            }
+        return KErrNone;
+        }
+
+    TInt ParsePhoto( const TUint8* aP, TInt aN, TInt& aO, TPreview& aMsg )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0x2331b22du || c == 0x9c477dd8u )
+            {
+            return KErrNone;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 flags = GetU32( aP + aO );
+        aO += 4;
+        if ( Need( aO, aN, 16 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aMsg.iFileId = (TInt64)GetU64( aP + aO );
+        aO += 8;
+        aMsg.iFileHash = (TInt64)GetU64( aP + aO );
+        aO += 8;
+        if ( ReadFileRef( aP, aN, aO, aMsg.iFileRef ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        if ( SkipPhotoSizes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( flags & 2 ) != 0 && SkipPhotoSizes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        aMsg.iKind = (TUint8)ESgPhoto;
+        aMsg.iPhotoLoc = ETrue;
+        return KErrNone;
+        }
+
+    TInt SkipStickerSet( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0x9de7a269u )
+            {
+            if ( Need( aO, aN, 16 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 16;
+            }
+        else if ( c == 0x861cc8a0u || c == 0x43b64c29u )
+            {
+            return SkipBytes( aP, aN, aO );
+            }
+        return KErrNone;
+        }
+
+    TInt ParseDocument( const TUint8* aP, TInt aN, TInt& aO, TPreview& aMsg )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 flags = GetU32( aP + aO );
+        aO += 4;
+        if ( Need( aO, aN, 16 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aMsg.iFileId = (TInt64)GetU64( aP + aO );
+        aO += 8;
+        aMsg.iFileHash = (TInt64)GetU64( aP + aO );
+        aO += 8;
+        if ( ReadFileRef( aP, aN, aO, aMsg.iFileRef ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        TBuf<40> mime;
+        if ( ReadStr( aP, aN, aO, mime ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        if ( ( flags & 1 ) != 0 && SkipPhotoSizes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( flags & 2 ) != 0 && SkipPhotoSizes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        if ( Need( aO, aN, 8 ) != KErrNone || GetU32( aP + aO ) != 0x1cb5c415u )
+            {
+            return KErrCorrupt;
+            }
+        const TInt n = (TInt)GetU32( aP + aO + 4 );
+        aO += 8;
+        TInt i = 0;
+        aMsg.iKind = (TUint8)ESgFile;
+        aMsg.iPhotoLoc = EFalse;
+        _LIT( KOgg, "audio/ogg" );
+        _LIT( KAac, "audio/" );
+        _LIT( KVid, "video/" );
+        _LIT( KWebp, "image/webp" );
+        if ( mime.Length() >= 9 )
+            {
+            TBuf<9> head;
+            head.Copy( mime.Left( 9 ) );
+            if ( head.CompareF( KOgg ) == 0 )
+                {
+                aMsg.iKind = (TUint8)ESgVoice;
+                }
+            }
+        if ( mime.Length() >= 6 && aMsg.iKind == (TUint8)ESgFile )
+            {
+            TBuf<6> head;
+            head.Copy( mime.Left( 6 ) );
+            if ( head.CompareF( KAac ) == 0 )
+                {
+                aMsg.iKind = (TUint8)ESgAudio;
+                }
+            else if ( head.CompareF( KVid ) == 0 )
+                {
+                aMsg.iKind = (TUint8)ESgVideo;
+                }
+            }
+        if ( mime.CompareF( KWebp ) == 0 )
+            {
+            aMsg.iKind = (TUint8)ESgSticker;
+            }
+        for ( i = 0; i < n; i++ )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            const TUint32 ac = GetU32( aP + aO );
+            aO += 4;
+            if ( ac == 0x9852f9c6u )
+                {
+                if ( Need( aO, aN, 8 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                const TUint32 af = GetU32( aP + aO );
+                aO += 4;
+                aMsg.iDuration = GetI32( aP + aO );
+                aO += 4;
+                if ( ( af & ( 1u << 10 ) ) != 0 )
+                    {
+                    aMsg.iKind = (TUint8)ESgVoice;
+                    }
+                else if ( aMsg.iKind != (TUint8)ESgVoice )
+                    {
+                    aMsg.iKind = (TUint8)ESgAudio;
+                    }
+                if ( ( af & 1 ) != 0 && SkipBytes( aP, aN, aO ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                if ( ( af & 2 ) != 0 && SkipBytes( aP, aN, aO ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                if ( ( af & 4 ) != 0 && SkipBytes( aP, aN, aO ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                }
+            else if ( ac == 0x6319d612u )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                const TUint32 sf = GetU32( aP + aO );
+                aO += 4;
+                TBuf<40> alt;
+                if ( ReadStr( aP, aN, aO, alt ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aMsg.iKind = (TUint8)ESgSticker;
+                if ( aMsg.iText.Length() == 0 )
+                    {
+                    aMsg.iText.Copy( alt );
+                    }
+                if ( SkipStickerSet( aP, aN, aO ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                if ( ( sf & 1 ) != 0 )
+                    {
+                    if ( Need( aO, aN, 16 ) != KErrNone )
+                        {
+                        return KErrCorrupt;
+                        }
+                    aO += 16;
+                    }
+                }
+            else if ( ac == 0x0ef02ce6u || ac == 0x6319d612u )
+                {
+                }
+            else if ( ac == 0xef02ce6u || ac == 0x5910cccbu )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                const TUint32 vf = GetU32( aP + aO );
+                aO += 4;
+                if ( Need( aO, aN, 12 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aMsg.iDuration = GetI32( aP + aO );
+                aO += 12;
+                aMsg.iKind = (TUint8)ESgVideo;
+                if ( ( vf & 4 ) != 0 )
+                    {
+                    aO += 8;
+                    }
+                }
+            else if ( ac == 0x15590068u )
+                {
+                TBuf<40> fn;
+                if ( ReadStr( aP, aN, aO, fn ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aMsg.iFileName.Copy( fn.Left( aMsg.iFileName.MaxLength() ) );
+                if ( aMsg.iText.Length() == 0 )
+                    {
+                    aMsg.iText.Copy( fn );
+                    }
+                }
+            else if ( ac == 0x6319d612u )
+                {
+                }
+            else
+                {
+                if ( ac == 0x11b58939u || ac == 0x9801d8f9u ||
+                     ac == 0xfd80bd84u || ac == 0x3a36e31bu )
+                    {
+                    }
+                else if ( ac == 0x51448e5u )
+                    {
+                    if ( Need( aO, aN, 4 ) != KErrNone )
+                        {
+                        return KErrCorrupt;
+                        }
+                    aMsg.iDuration = GetI32( aP + aO );
+                    aO += 4;
+                    if ( SkipBytes( aP, aN, aO ) != KErrNone ||
+                         SkipBytes( aP, aN, aO ) != KErrNone )
+                        {
+                        return KErrCorrupt;
+                        }
+                    aMsg.iKind = (TUint8)ESgAudio;
+                    }
+                }
+            }
+        return KErrNone;
+        }
+
+    void LabelKind( TPreview& aMsg )
+        {
+        if ( aMsg.iText.Length() > 0 )
+            {
+            return;
+            }
+        _LIT( KPhoto, "фото" );
+        _LIT( KVoice, "голосовое" );
+        _LIT( KAudio, "аудио" );
+        _LIT( KVideo, "видео" );
+        _LIT( KSticker, "стикер" );
+        _LIT( KFile, "файл" );
+        _LIT( KSvc, "сервис" );
+        switch ( aMsg.iKind )
+            {
+            case ESgPhoto:   aMsg.iText.Copy( KPhoto ); break;
+            case ESgVoice:   aMsg.iText.Copy( KVoice ); break;
+            case ESgAudio:   aMsg.iText.Copy( KAudio ); break;
+            case ESgVideo:   aMsg.iText.Copy( KVideo ); break;
+            case ESgSticker: aMsg.iText.Copy( KSticker ); break;
+            case ESgFile:    aMsg.iText.Copy( KFile ); break;
+            case ESgService: aMsg.iText.Copy( KSvc ); break;
+            default: break;
+            }
+        if ( aMsg.iDuration > 0 &&
+             ( aMsg.iKind == ESgVoice || aMsg.iKind == ESgAudio ||
+               aMsg.iKind == ESgVideo ) )
+            {
+            aMsg.iText.Append( ' ' );
+            aMsg.iText.AppendNum( aMsg.iDuration / 60 );
+            aMsg.iText.Append( ':' );
+            const TInt s = aMsg.iDuration % 60;
+            if ( s < 10 )
+                {
+                aMsg.iText.Append( '0' );
+                }
+            aMsg.iText.AppendNum( s );
+            }
+        }
+
+    void FillKindFromCtor( TUint32 aC, TPreview& aMsg );
+
+    TInt ParseMedia( const TUint8* aP, TInt aN, TInt& aO, TPreview& aMsg )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        if ( c == 0x695150d7u || c == 0x695150d3u || c == 0x86fa6a3cu )
+            {
+            aO += 4;
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            const TUint32 flags = GetU32( aP + aO );
+            aO += 4;
+            if ( ( flags & 1 ) != 0 &&
+                 ParsePhoto( aP, aN, aO, aMsg ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            if ( ( flags & 4 ) != 0 )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 4;
+                }
+            aMsg.iKind = (TUint8)ESgPhoto;
+            return KErrNone;
+            }
+        if ( c == 0x9cb070d7u || c == 0x4cf4dfdfu || c == 0x997739cfu )
+            {
+            aO += 4;
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            const TUint32 flags = GetU32( aP + aO );
+            aO += 4;
+            if ( ( flags & 1 ) != 0 &&
+                 ParseDocument( aP, aN, aO, aMsg ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            if ( ( flags & 4 ) != 0 )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 4;
+                }
+            return KErrNone;
+            }
+        if ( c == 0x56e0d474u || c == 0xb940c666u || c == 0x2ec0533fu )
+            {
+            if ( aMsg.iText.Length() == 0 )
+                {
+                _LIT( KGeo, "геолокация" );
+                aMsg.iText.Copy( KGeo );
+                }
+            return KErrNotSupported;
+            }
+        if ( c == 0x3f7ee58bu )
+            {
+            if ( aMsg.iText.Length() == 0 )
+                {
+                _LIT( KDice, "стикер" );
+                aMsg.iText.Copy( KDice );
+                }
+            aMsg.iKind = (TUint8)ESgSticker;
+            return KErrNotSupported;
+            }
+        FillKindFromCtor( c, aMsg );
+        return KErrNotSupported;
+        }
+
+    void FillKindFromCtor( TUint32 aC, TPreview& aMsg )
+        {
+        if ( aMsg.iText.Length() > 0 )
+            {
+            return;
+            }
+        _LIT( KPhoto, "фото" );
+        _LIT( KFile, "файл" );
+        _LIT( KMedia, "медиа" );
+        _LIT( KGeo, "геолокация" );
+        _LIT( KContact, "контакт" );
+        _LIT( KPoll, "опрос" );
+        _LIT( KLink, "ссылка" );
+        if ( aC == 0x695150d7u || aC == 0x695150d3u || aC == 0x86fa6a3cu )
+            {
+            aMsg.iText.Copy( KPhoto );
+            aMsg.iKind = (TUint8)ESgPhoto;
+            }
+        else if ( aC == 0x9cb070d7u || aC == 0x4cf4dfdfu )
+            {
+            aMsg.iText.Copy( KFile );
+            aMsg.iKind = (TUint8)ESgFile;
+            }
+        else if ( aC == 0x56e0d474u || aC == 0xb940c666u )
+            {
+            aMsg.iText.Copy( KGeo );
+            }
+        else if ( aC == 0x70322949u )
+            {
+            aMsg.iText.Copy( KContact );
+            }
+        else if ( aC == 0x4bd6e798u )
+            {
+            aMsg.iText.Copy( KPoll );
+            }
+        else if ( aC == 0xa32dd600u || aC == 0xddf10c3bu )
+            {
+            aMsg.iText.Copy( KLink );
+            }
+        else if ( aC != 0x3ded6320u && aC != 0x9f84f49eu )
+            {
+            aMsg.iText.Copy( KMedia );
+            }
+        }
+
+    TInt ReadMessage( const TUint8* aP, TInt aN, TInt& aO, TPreview& aMsg )
+        {
+        aMsg.iId = 0;
+        aMsg.iDate = 0;
+        aMsg.iOut = EFalse;
+        aMsg.iKind = (TUint8)ESgText;
+        aMsg.iDuration = 0;
+        aMsg.iPhotoLoc = EFalse;
+        aMsg.iFileId = 0;
+        aMsg.iFileHash = 0;
+        aMsg.iFileRef.Zero();
+        aMsg.iFileName.Zero();
+        aMsg.iText.Zero();
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0x83e5de54u )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aMsg.iId = GetI32( aP + aO );
+            aO += 4;
+            return KErrNone;
+            }
+        if ( c == 0x90a6ca84u )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            const TUint32 flags = GetU32( aP + aO );
+            aO += 4;
+            aMsg.iId = GetI32( aP + aO );
+            aO += 4;
+            if ( ( flags & 1u ) != 0 )
+                {
+                TInt kind = 0;
+                TInt64 pid = 0;
+                if ( SkipPeer( aP, aN, aO, kind, pid ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                }
+            return KErrNone;
+            }
+        if ( c != 0x38116ee0u && c != 0x2b085862u )
+            {
+            return KErrNotSupported;
+            }
+        if ( Need( aO, aN, 8 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 flags = GetU32( aP + aO );
+        aO += 4;
+        aMsg.iId = GetI32( aP + aO );
+        aO += 4;
+        aMsg.iOut = ( flags & 2 ) != 0;
+        TInt kind = 0;
+        TInt64 pid = 0;
+        if ( ( flags & ( 1u << 8 ) ) != 0 &&
+             SkipPeer( aP, aN, aO, kind, pid ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( SkipPeer( aP, aN, aO, kind, pid ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( c == 0x38116ee0u && ( flags & ( 1u << 2 ) ) != 0 &&
+             SkipFwdHeader( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( c == 0x38116ee0u && ( flags & ( 1u << 11 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 8;
+            }
+        if ( ( flags & ( 1u << 3 ) ) != 0 &&
+             SkipReplyHeader( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aMsg.iDate = GetI32( aP + aO );
+        aO += 4;
+        if ( c == 0x2b085862u )
+            {
+            aMsg.iKind = (TUint8)ESgService;
+            _LIT( KSvc, "сервис" );
+            aMsg.iText.Copy( KSvc );
+            return KErrNone;
+            }
+        if ( ReadStr( aP, aN, aO, aMsg.iText ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        FlattenPreview( aMsg.iText );
+        if ( ( flags & ( 1u << 9 ) ) != 0 )
+            {
+            const TInt saved = aO;
+            if ( ParseMedia( aP, aN, aO, aMsg ) != KErrNone )
+                {
+                aO = saved;
+                if ( Need( aO, aN, 4 ) == KErrNone )
+                    {
+                    FillKindFromCtor( GetU32( aP + aO ), aMsg );
+                    }
+                }
+            LabelKind( aMsg );
+            }
+        return KErrNone;
+        }
+
+    TInt ReadMessagePreview( const TUint8* aP, TInt aN, TInt& aO,
+                             TInt& aId, TInt& aDate, TDes& aText )
+        {
+        TPreview msg;
+        const TInt err = ReadMessage( aP, aN, aO, msg );
+        aId = msg.iId;
+        aDate = msg.iDate;
+        aText.Zero();
+        aText.Copy( msg.iText.Left( aText.MaxLength() ) );
+        return err;
+        }
+
+    void PutInputPeer( TDes8& aOut, TInt aKind, TInt64 aId, TInt64 aHash )
+        {
+        if ( aKind == 2 )
+            {
+            PutU32( aOut, KInputPeerChat );
+            PutU64( aOut, (TUint64)aId );
+            }
+        else if ( aKind == 3 || aKind == 4 )
+            {
+            PutU32( aOut, KInputPeerChan );
+            PutU64( aOut, (TUint64)aId );
+            PutU64( aOut, (TUint64)aHash );
+            }
+        else
+            {
+            PutU32( aOut, KInputPeerUser );
+            PutU64( aOut, (TUint64)aId );
+            PutU64( aOut, (TUint64)aHash );
+            }
+        }
+
     _LIT8( KDevice, "Nokia N95 8GB" );
     _LIT8( KSystem, "Symbian OS 9.2" );
-    _LIT8( KAppVer, "0.1.0" );
+    _LIT8( KAppVer, "0.2.10" );
     _LIT8( KLang, "ru" );
     _LIT8( KLangPack, "" );
 
@@ -304,11 +2256,22 @@ namespace
     _LIT( KStatusCode, "Запрос кода..." );
     _LIT( KStatusPwd, "Проверка пароля..." );
     _LIT( KStatusResume, "Переподключение..." );
+    _LIT( KStatusDc, "Датацентр " );
     _LIT( KStatusChats, "Загрузка чатов..." );
+    _LIT( KStatusContacts, "Контакты..." );
+    _LIT( KStatusHist, "Сообщения..." );
+    _LIT( KStatusOut, "Отправка..." );
+    _LIT( KStatusFile, "Медиа..." );
+    _LIT( KStatusUp, "Загрузка..." );
+    _LIT( KStatusSaved, "Вход..." );
     _LIT( KNeedApi, "Впишите api_id и api_hash в SymgramApi.h" );
     _LIT8( KNeedPwdErr, "SESSION_PASSWORD_NEEDED" );
     _LIT8( KBadPwdErr, "PASSWORD_HASH_INVALID" );
     _LIT8( KSrpIdErr, "SRP_ID_INVALID" );
+    _LIT8( KAuthUnreg, "AUTH_KEY_UNREGISTERED" );
+    _LIT8( KAuthInv, "AUTH_KEY_INVALID" );
+    _LIT8( KSessRev, "SESSION_REVOKED" );
+    _LIT8( KUserDead, "USER_DEACTIVATED" );
     }
 
 CSymgramSession* CSymgramSession::NewL( MSymgramSessionObserver& aObserver )
@@ -326,6 +2289,8 @@ CSymgramSession::CSymgramSession( MSymgramSessionObserver& aObserver )
       iState( EIdle ),
       iBusy( EFalse ),
       iSentAbridged( EFalse ),
+      iAuthed( EFalse ),
+      iRpc( ERpcNone ),
       iRsaN( KTelegramRsaN ),
       iAuthKeyId( 0 ),
       iSalt( 0 ),
@@ -334,24 +2299,61 @@ CSymgramSession::CSymgramSession( MSymgramSessionObserver& aObserver )
       iSeq( 0 ),
       iTimeOffset( 0 ),
       iPhase( 0 ),
+      iDcId( 2 ),
       iHaveSrp( EFalse ),
+      iSrpTries( 0 ),
       iSrpG( 0 ),
       iSrpId( 0 ),
       iRead( NULL, 0, 0 ),
       iHave( 0 ),
       iResume( EFalse ),
       iResumeTries( 0 ),
+      iSwapDcAddr( EFalse ),
+      iTriedAddrSwap( EFalse ),
       iPbkdfIdle( NULL ),
       iPbkdfN( 0 ),
-      iPbkdfLastPct( -1 )
+      iPbkdfLastPct( -1 ),
+      iSrp( NULL ),
+      iPeerId( 0 ),
+      iPeerKind( 0 ),
+      iPeerHash( 0 ),
+      iFileMsgId( 0 ),
+      iFileId( 0 ),
+      iFileHash( 0 ),
+      iFilePhoto( EFalse ),
+      iPendRpc( ERpcNone ),
+      iSaveFull( EFalse ),
+      iSaveOpen( EFalse ),
+      iSaveOff( 0 ),
+      iUpload( NULL ),
+      iUploadId( 0 ),
+      iUploadPart( 0 ),
+      iUploadParts( 0 ),
+      iUploadPhoto( EFalse ),
+      iIn( NULL )
     {
     CActiveScheduler::Add( this );
     }
 
 void CSymgramSession::ConstructL()
     {
+    User::LeaveIfError( iFs.Connect() );
     User::LeaveIfError( iServ.Connect() );
+    iIn = HBufC8::NewL( 8192 );
     iPbkdfIdle = CIdle::NewL( CActive::EPriorityLow );
+    // EKA2L1 copies TInetAddr as four LE bytes into sockaddr_in with no
+    // htonl, so a host-order INET_ADDR goes to the wrong host. Real S60
+    // phones stay well under 800 MHz; the emulator often reports the PC.
+    TInt khz = 0;
+    TInt ram = 0;
+    if ( ( HAL::Get( HALData::ECPUSpeed, khz ) == KErrNone &&
+           khz >= 800000 ) ||
+         ( HAL::Get( HALData::EMemoryRAM, ram ) == KErrNone &&
+           ram > 256 * 1024 * 1024 ) )
+        {
+        iSwapDcAddr = ETrue;
+        }
+    LoadSession();
     }
 
 CSymgramSession::~CSymgramSession()
@@ -359,14 +2361,549 @@ CSymgramSession::~CSymgramSession()
     Cancel();
     StopPbkdf();
     delete iPbkdfIdle;
+    delete iIn;
+    delete iUpload;
+    ClearSave();
     CloseSocket();
     iConn.Close();
     iServ.Close();
+    iFs.Close();
     }
 
 TBool CSymgramSession::IsBusy() const
     {
     return iBusy;
+    }
+
+TBool CSymgramSession::HasSavedSession() const
+    {
+    return iAuthKey.Length() == 256 && iAuthKeyId != 0 && iPhase >= 3;
+    }
+
+const TDesC8& CSymgramSession::Phone() const
+    {
+    return iPhone;
+    }
+
+void CSymgramSession::SendRpcL( const TDesC8& aWrapped )
+    {
+    if ( IsActive() )
+        {
+        Cancel();
+        }
+    if ( aWrapped.Length() <= iLastRpc.MaxLength() )
+        {
+        iLastRpc.Copy( aWrapped );
+        }
+    else
+        {
+        iLastRpc.Zero();
+        }
+    iBusy = ETrue;
+    SendEncryptedL( aWrapped );
+    }
+
+void CSymgramSession::LogoutL()
+    {
+    Cancel();
+    CloseSocket();
+    DropSavedSession();
+    iPwdUtf.Zero();
+    iBusy = EFalse;
+    iAuthed = EFalse;
+    iRpc = ERpcNone;
+    iPendRpc = ERpcNone;
+    iState = EIdle;
+    iObserver.SessionLoggedOutL();
+    }
+
+void CSymgramSession::RefreshDialogsL()
+    {
+    if ( iPhase < 3 || iAuthKeyId == 0 )
+        {
+        return;
+        }
+    if ( iBusy )
+        {
+        iPendRpc = ERpcDialogs;
+        return;
+        }
+    SendGetDialogsL();
+    }
+
+void CSymgramSession::GetHistoryL( TInt64 aId, TInt aKind, TInt64 aHash )
+    {
+    iPeerId = aId;
+    iPeerKind = aKind;
+    iPeerHash = aHash;
+    if ( iBusy || iPhase < 3 )
+        {
+        iPendRpc = ERpcHistory;
+        return;
+        }
+    SendGetHistoryNowL();
+    }
+
+void CSymgramSession::SendTextL( TInt64 aId, TInt aKind, TInt64 aHash,
+                                 const TDesC8& aText )
+    {
+    iPeerId = aId;
+    iPeerKind = aKind;
+    iPeerHash = aHash;
+    iSendUtf.Copy( aText.Left( iSendUtf.MaxLength() ) );
+    if ( iBusy || iPhase < 3 )
+        {
+        iPendRpc = ERpcSend;
+        return;
+        }
+    SendTextNowL();
+    }
+
+void CSymgramSession::GetFileL( TInt aMsgId, TInt64 aFileId, TInt64 aHash,
+                                const TDesC8& aRef, TBool aPhoto )
+    {
+    if ( iSaveFull )
+        {
+        return;
+        }
+    iFileMsgId = aMsgId;
+    iFileId = aFileId;
+    iFileHash = aHash;
+    iFileRef.Copy( aRef.Left( iFileRef.MaxLength() ) );
+    iFilePhoto = aPhoto;
+    iSaveFull = EFalse;
+    if ( iBusy || iPhase < 3 )
+        {
+        iPendRpc = ERpcFile;
+        return;
+        }
+    SendGetFileNowL();
+    }
+
+void CSymgramSession::ClearSave()
+    {
+    iSaveFile.Close();
+    iSaveFull = EFalse;
+    iSaveOpen = EFalse;
+    iSaveOff = 0;
+    iSavePath.Zero();
+    }
+
+void CSymgramSession::GetFileSaveL( TInt aMsgId, TInt64 aFileId, TInt64 aHash,
+                                    const TDesC8& aRef, TBool aPhoto,
+                                    const TDesC& aPath, TBool aOpen )
+    {
+    if ( iPhase < 3 || iAuthKeyId == 0 )
+        {
+        return;
+        }
+    if ( iBusy )
+        {
+        _LIT( KWait, "Подождите..." );
+        iObserver.SessionStatusL( KWait );
+        return;
+        }
+    ClearSave();
+    iFileMsgId = aMsgId;
+    iFileId = aFileId;
+    iFileHash = aHash;
+    iFileRef.Copy( aRef.Left( iFileRef.MaxLength() ) );
+    iFilePhoto = aPhoto;
+    iSavePath.Copy( aPath.Left( iSavePath.MaxLength() ) );
+    iSaveOpen = aOpen;
+    iSaveOff = 0;
+    iSaveFull = ETrue;
+    User::LeaveIfError( iSaveFile.Replace( iFs, iSavePath,
+                                           EFileWrite | EFileStream ) );
+    SendGetFileNowL();
+    }
+
+void CSymgramSession::ClearUpload()
+    {
+    delete iUpload;
+    iUpload = NULL;
+    iUploadId = 0;
+    iUploadPart = 0;
+    iUploadParts = 0;
+    iUploadPhoto = EFalse;
+    iUploadName.Zero();
+    iUploadMd5.Zero();
+    }
+
+void CSymgramSession::SendFileL( TInt64 aId, TInt aKind, TInt64 aHash,
+                                 const TDesC& aPath )
+    {
+    if ( iPhase < 3 || iAuthKeyId == 0 )
+        {
+        return;
+        }
+    if ( iBusy )
+        {
+        _LIT( KWait, "Подождите..." );
+        iObserver.SessionStatusL( KWait );
+        return;
+        }
+    RFile file;
+    User::LeaveIfError( file.Open( iFs, aPath, EFileRead | EFileShareReadersOnly ) );
+    CleanupClosePushL( file );
+    TInt size = 0;
+    User::LeaveIfError( file.Size( size ) );
+    if ( size < 32 || size > KUploadMax )
+        {
+        CleanupStack::PopAndDestroy();
+        _LIT( KSz, "Файл слишком большой" );
+        iObserver.SessionErrorL( KSz );
+        return;
+        }
+    ClearUpload();
+    iUpload = HBufC8::NewL( size );
+    TPtr8 body = iUpload->Des();
+    User::LeaveIfError( file.Read( body ) );
+    CleanupStack::PopAndDestroy();
+    TUint8 dig[ 16 ];
+    Md5( iUpload->Ptr(), iUpload->Length(), dig );
+    _LIT8( KHex, "0123456789abcdef" );
+    TInt h = 0;
+    for ( h = 0; h < 16; h++ )
+        {
+        iUploadMd5.Append( KHex()[ ( dig[ h ] >> 4 ) & 0xF ] );
+        iUploadMd5.Append( KHex()[ dig[ h ] & 0xF ] );
+        }
+    TParse parse;
+    parse.Set( aPath, NULL, NULL );
+    const TPtrC nm = parse.NameAndExt();
+    TInt c = 0;
+    for ( c = 0; c < nm.Length() && iUploadName.Length() < iUploadName.MaxLength(); c++ )
+        {
+        const TText ch = nm[ c ];
+        if ( ch >= 32 && ch < 127 )
+            {
+            iUploadName.Append( (TUint8)ch );
+            }
+        }
+    if ( iUploadName.Length() == 0 )
+        {
+        _LIT8( KDef, "photo.jpg" );
+        iUploadName.Copy( KDef );
+        }
+    iUploadPhoto = ( iUpload->Length() >= 3 &&
+                     (*iUpload)[ 0 ] == 0xFF &&
+                     (*iUpload)[ 1 ] == 0xD8 &&
+                     (*iUpload)[ 2 ] == 0xFF );
+    iPeerId = aId;
+    iPeerKind = aKind;
+    iPeerHash = aHash;
+    iUploadId = (TInt64)MessageId();
+    iUploadPart = 0;
+    iUploadParts = ( iUpload->Length() + KUploadChunk - 1 ) / KUploadChunk;
+    SendSavePartNowL();
+    }
+
+void CSymgramSession::SendSavePartNowL()
+    {
+    if ( !iUpload || iUploadPart >= iUploadParts )
+        {
+        SendMediaNowL();
+        return;
+        }
+    const TInt off = iUploadPart * KUploadChunk;
+    TInt n = iUpload->Length() - off;
+    if ( n > KUploadChunk )
+        {
+        n = KUploadChunk;
+        }
+    HBufC8* query = HBufC8::NewLC( n + 48 );
+    TPtr8 q = query->Des();
+    PutU32( q, KSaveFilePart );
+    PutU64( q, (TUint64)iUploadId );
+    PutU32( q, iUploadPart );
+    TlAppendBytes( q, iUpload->Ptr() + off, n );
+    HBufC8* wrapped = HBufC8::NewLC( q.Length() + 256 );
+    TPtr8 w = wrapped->Des();
+    WrapInitL( q, w );
+    iRpc = ERpcSavePart;
+    iObserver.SessionStatusL( KStatusUp );
+    SendRpcL( w );
+    CleanupStack::PopAndDestroy( 2, query );
+    }
+
+void CSymgramSession::SendMediaNowL()
+    {
+    TBuf8<512> query;
+    PutU32( query, KSendMedia );
+    PutU32( query, 0 );
+    PutInputPeer( query, iPeerKind, iPeerId, iPeerHash );
+    if ( iUploadPhoto )
+        {
+        PutU32( query, KInputMediaPhoto );
+        PutU32( query, 0 );
+        PutU32( query, KInputFile );
+        PutU64( query, (TUint64)iUploadId );
+        PutU32( query, iUploadParts );
+        TlAppendBytes( query, iUploadName.Ptr(), iUploadName.Length() );
+        TlAppendBytes( query, iUploadMd5.Ptr(), iUploadMd5.Length() );
+        }
+    else
+        {
+        PutU32( query, KInputMediaDoc );
+        PutU32( query, 0 );
+        PutU32( query, KInputFile );
+        PutU64( query, (TUint64)iUploadId );
+        PutU32( query, iUploadParts );
+        TlAppendBytes( query, iUploadName.Ptr(), iUploadName.Length() );
+        TlAppendBytes( query, iUploadMd5.Ptr(), iUploadMd5.Length() );
+        _LIT8( KMime, "application/octet-stream" );
+        _LIT8( KJpeg, "image/jpeg" );
+        _LIT8( KPng, "image/png" );
+        const TDesC8* mime = &KMime;
+        if ( iUploadName.Length() >= 4 )
+            {
+            const TInt n = iUploadName.Length();
+            if ( iUploadName[ n - 4 ] == '.' &&
+                 ( iUploadName[ n - 3 ] == 'j' || iUploadName[ n - 3 ] == 'J' ) )
+                {
+                mime = &KJpeg;
+                }
+            else if ( iUploadName[ n - 4 ] == '.' &&
+                      ( iUploadName[ n - 3 ] == 'p' || iUploadName[ n - 3 ] == 'P' ) )
+                {
+                mime = &KPng;
+                }
+            }
+        TlAppendBytes( query, mime->Ptr(), mime->Length() );
+        PutU32( query, KTlVector );
+        PutU32( query, 1 );
+        PutU32( query, KDocAttrName );
+        TlAppendBytes( query, iUploadName.Ptr(), iUploadName.Length() );
+        }
+    PutU32( query, 0 );
+    PutU64( query, MessageId() );
+    TBuf8<768> wrapped;
+    WrapInitL( query, wrapped );
+    iRpc = ERpcSend;
+    iObserver.SessionStatusL( KStatusOut );
+    SendRpcL( wrapped );
+    }
+
+void CSymgramSession::SendGetHistoryNowL()
+    {
+    TBuf8<80> query;
+    PutU32( query, KGetHistory );
+    PutInputPeer( query, iPeerKind, iPeerId, iPeerHash );
+    PutU32( query, 0 );
+    PutU32( query, 0 );
+    PutU32( query, 0 );
+    PutU32( query, 20 );
+    PutU32( query, 0 );
+    PutU32( query, 0 );
+    PutU64( query, 0 );
+    TBuf8<448> wrapped;
+    WrapInitL( query, wrapped );
+    iRpc = ERpcHistory;
+    iObserver.SessionStatusL( KStatusHist );
+    SendRpcL( wrapped );
+    }
+
+void CSymgramSession::SendTextNowL()
+    {
+    TBuf8<512> query;
+    PutU32( query, KSendMessage );
+    PutU32( query, 0 );
+    PutInputPeer( query, iPeerKind, iPeerId, iPeerHash );
+    TlAppendBytes( query, iSendUtf.Ptr(), iSendUtf.Length() );
+    PutU64( query, MessageId() );
+    TBuf8<700> wrapped;
+    WrapInitL( query, wrapped );
+    iRpc = ERpcSend;
+    iObserver.SessionStatusL( KStatusOut );
+    SendRpcL( wrapped );
+    }
+
+void CSymgramSession::SendGetFileNowL()
+    {
+    TBuf8<256> query;
+    PutU32( query, KGetFile );
+    PutU32( query, 0 );
+    PutU32( query, iFilePhoto ? KInputPhotoLoc : KInputDocLoc );
+    PutU64( query, (TUint64)iFileId );
+    PutU64( query, (TUint64)iFileHash );
+    TlAppendBytes( query, iFileRef.Ptr(), iFileRef.Length() );
+    if ( iSaveFull )
+        {
+        PutU32( query, 0 );
+        PutU64( query, (TUint64)iSaveOff );
+        }
+    else
+        {
+        _LIT8( KSz, "s" );
+        TlAppendBytes( query, KSz().Ptr(), KSz().Length() );
+        PutU64( query, 0 );
+        }
+    PutU32( query, KDownloadChunk );
+    TBuf8<512> wrapped;
+    WrapInitL( query, wrapped );
+    iRpc = iSaveFull ? ERpcSaveFile : ERpcFile;
+    iObserver.SessionStatusL( KStatusFile );
+    SendRpcL( wrapped );
+    }
+
+void CSymgramSession::FlushPendingL()
+    {
+    const TRpc next = iPendRpc;
+    iPendRpc = ERpcNone;
+    if ( next == ERpcHistory )
+        {
+        SendGetHistoryNowL();
+        }
+    else if ( next == ERpcSend )
+        {
+        SendTextNowL();
+        }
+    else if ( next == ERpcFile || next == ERpcSaveFile )
+        {
+        SendGetFileNowL();
+        }
+    else if ( next == ERpcDialogs )
+        {
+        SendGetDialogsL();
+        }
+    }
+
+TBool CSymgramSession::IsFileMigrate( const TDesC8& aMsg ) const
+    {
+    _LIT8( KMig, "FILE_MIGRATE_" );
+    return aMsg.Length() > KMig().Length() &&
+           aMsg.Left( KMig().Length() ) == KMig;
+    }
+
+TInt CSymgramSession::SessionFileName( TFileName& aOut )
+    {
+    RProcess proc;
+    TParse parse;
+    parse.Set( proc.FileName(), NULL, NULL );
+    TInt drive = EDriveC;
+    if ( parse.Drive().Length() > 0 )
+        {
+        TInt d = 0;
+        if ( iFs.CharToDrive( parse.Drive()[ 0 ], d ) == KErrNone )
+            {
+            drive = d;
+            }
+        }
+    iFs.CreatePrivatePath( drive );
+    TFileName priv;
+    iFs.PrivatePath( priv );
+    aOut.Zero();
+    aOut.Append( parse.Drive() );
+    aOut.Append( priv );
+    _LIT( KFn, "session.bin" );
+    aOut.Append( KFn );
+    return KErrNone;
+    }
+
+TInt CSymgramSession::LoadSession()
+    {
+    TFileName fn;
+    if ( SessionFileName( fn ) != KErrNone )
+        {
+        return KErrNotFound;
+        }
+    RFile file;
+    if ( file.Open( iFs, fn, EFileRead | EFileStream | EFileShareReadersOnly )
+         != KErrNone )
+        {
+        return KErrNotFound;
+        }
+    TBuf8<320> raw;
+    TInt err = file.Read( raw );
+    file.Close();
+    if ( err != KErrNone || raw.Length() < 309 )
+        {
+        return KErrCorrupt;
+        }
+    const TUint8* p = raw.Ptr();
+    if ( GetU32( p ) != KSessionMagic )
+        {
+        return KErrCorrupt;
+        }
+    const TInt dc = GetI32( p + 4 );
+    if ( dc < 1 || dc > KDcMax )
+        {
+        return KErrCorrupt;
+        }
+    iDcId = dc;
+    iAuthKey.Copy( p + 8, 256 );
+    iAuthKeyId = GetU64( p + 264 );
+    iSalt = GetU64( p + 272 );
+    iTimeOffset = GetI32( p + 280 );
+    const TInt n = p[ 284 ];
+    if ( n > 0 && n <= iPhone.MaxLength() )
+        {
+        iPhone.Copy( p + 285, n );
+        }
+    if ( iAuthKeyId == 0 )
+        {
+        iAuthKey.Zero();
+        return KErrNotFound;
+        }
+    iPhase = 3;
+    return KErrNone;
+    }
+
+void CSymgramSession::SaveSession()
+    {
+    if ( iAuthKey.Length() != 256 || iAuthKeyId == 0 )
+        {
+        return;
+        }
+    TFileName fn;
+    if ( SessionFileName( fn ) != KErrNone )
+        {
+        return;
+        }
+    TBuf8<320> raw;
+    PutU32( raw, KSessionMagic );
+    PutU32( raw, (TUint32)iDcId );
+    raw.Append( iAuthKey );
+    PutU64( raw, iAuthKeyId );
+    PutU64( raw, iSalt );
+    PutU32( raw, (TUint32)iTimeOffset );
+    raw.Append( (TUint8)iPhone.Length() );
+    raw.Append( iPhone );
+    while ( raw.Length() < 309 )
+        {
+        raw.Append( 0 );
+        }
+    RFile file;
+    TInt err = file.Replace( iFs, fn, EFileWrite | EFileStream );
+    if ( err != KErrNone )
+        {
+        return;
+        }
+    file.Write( raw );
+    file.Close();
+    }
+
+void CSymgramSession::DropSavedSession()
+    {
+    TFileName fn;
+    if ( SessionFileName( fn ) == KErrNone )
+        {
+        iFs.Delete( fn );
+        }
+    iAuthKey.Zero();
+    iAuthKeyId = 0;
+    iSalt = 0;
+    iPhase = 0;
+    iPwdUtf.Zero();
+    }
+
+TBool CSymgramSession::IsDeadAuth( const TDesC8& aMsg ) const
+    {
+    return aMsg == KAuthUnreg
+        || aMsg == KAuthInv
+        || aMsg == KSessRev
+        || aMsg == KUserDead;
     }
 
 void CSymgramSession::CloseSocket()
@@ -407,6 +2944,9 @@ TInt CSymgramSession::RunError( TInt aError )
 void CSymgramSession::FailL( TInt aError )
     {
     StopPbkdf();
+    iPwdUtf.Zero();
+    ClearUpload();
+    ClearSave();
     CloseSocket();
     iState = EIdle;
     iBusy = EFalse;
@@ -416,6 +2956,9 @@ void CSymgramSession::FailL( TInt aError )
 void CSymgramSession::FailTextL( const TDesC& aText )
     {
     StopPbkdf();
+    iPwdUtf.Zero();
+    ClearUpload();
+    ClearSave();
     CloseSocket();
     iState = EIdle;
     iBusy = EFalse;
@@ -424,7 +2967,11 @@ void CSymgramSession::FailTextL( const TDesC& aText )
 
 TBool CSymgramSession::CanResume( TInt aError ) const
     {
-    if ( iPhase < 3 || iLastRpc.Length() == 0 || iResumeTries >= 3 )
+    if ( iPhase < 3 || iResumeTries >= 3 )
+        {
+        return EFalse;
+        }
+    if ( iLastRpc.Length() == 0 && iAuthKeyId == 0 )
         {
         return EFalse;
         }
@@ -433,6 +2980,60 @@ TBool CSymgramSession::CanResume( TInt aError ) const
         || aError == KErrCouldNotConnect
         || aError == KErrTimedOut
         || aError == KErrCommsLineFail
+        || aError == KErrNotReady
+        || aError == KErrEof
+        || aError == KErrSessionClosed;
+    }
+
+TInt CSymgramSession::OpenTcpSocket()
+    {
+    CloseSocket();
+    TInt err = KErrNotReady;
+    if ( iConn.SubSessionHandle() )
+        {
+        err = iSocket.Open( iServ, KAfInet, KSockStream,
+                            KProtocolInetTcp, iConn );
+        }
+    if ( err != KErrNone )
+        {
+        CloseSocket();
+        err = iSocket.Open( iServ, KAfInet, KSockStream, KProtocolInetTcp );
+        }
+    return err;
+    }
+
+void CSymgramSession::BeginTcpConnectL()
+    {
+    User::LeaveIfError( OpenTcpSocket() );
+    iAddr = TInetAddr();
+    iAddr.SetAddress( DcAddr() );
+    iAddr.SetPort( KDcPort );
+    if ( iState != EResuming )
+        {
+        iState = EConnecting;
+        }
+    if ( iResume )
+        {
+        iObserver.SessionStatusL( KStatusResume );
+        }
+    else
+        {
+        iObserver.SessionStatusL( KStatusConn );
+        }
+    iSocket.Connect( iAddr, iStatus );
+    SetActive();
+    }
+
+TBool CSymgramSession::ShouldRetryAddrSwap( TInt aError ) const
+    {
+    if ( iTriedAddrSwap )
+        {
+        return EFalse;
+        }
+    return aError == KErrTimedOut
+        || aError == KErrCouldNotConnect
+        || aError == KErrGeneral
+        || aError == KErrCouldNotDisconnect
         || aError == KErrNotReady;
     }
 
@@ -443,7 +3044,7 @@ void CSymgramSession::ResumeConnectL()
     CloseSocket();
     iSentAbridged = EFalse;
     iHave = 0;
-    iIn.Zero();
+    iIn->Des().Zero();
     iSeq = 0;
     iLastMsgId = 0;
     TBuf8<8> sid;
@@ -452,23 +3053,74 @@ void CSymgramSession::ResumeConnectL()
     iSessionId = GetU64( sid.Ptr() );
     iBusy = ETrue;
     iResume = ETrue;
-    iObserver.SessionStatusL( KStatusResume );
-    User::LeaveIfError( iSocket.Open( iServ, KAfInet, KSockStream,
-                                      KProtocolInetTcp, iConn ) );
-    iAddr.SetAddress( KDc2 );
-    iAddr.SetPort( KDcPort );
     iState = EResuming;
-    iSocket.Connect( iAddr, iStatus );
-    SetActive();
+    BeginTcpConnectL();
     }
 
 void CSymgramSession::RpcFailL( const TDesC8& aMsg )
     {
+    if ( ( iRpc == ERpcFile || iRpc == ERpcSaveFile ) && IsFileMigrate( aMsg ) )
+        {
+        ClearSave();
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        iState = EIdle;
+        _LIT( KOn, "Файл на другом сервере" );
+        iObserver.SessionStatusL( KOn );
+        FlushPendingL();
+        return;
+        }
+    if ( IsDeadAuth( aMsg ) )
+        {
+        DropSavedSession();
+        iBusy = EFalse;
+        iState = EIdle;
+        iAuthed = EFalse;
+        iObserver.SessionLoggedOutL();
+        }
     TBuf<64> text;
     ToUnicode( aMsg, text );
     iBusy = EFalse;
     iState = EIdle;
+    iRpc = ERpcNone;
+    ClearUpload();
+    ClearSave();
     iObserver.SessionErrorL( text );
+    }
+
+TUint32 CSymgramSession::DcAddr() const
+    {
+    TUint32 addr = KDcAddr[ 2 ];
+    if ( iDcId >= 1 && iDcId <= KDcMax )
+        {
+        addr = KDcAddr[ iDcId ];
+        }
+    if ( iSwapDcAddr )
+        {
+        addr = ByteOrder::Swap32( addr );
+        }
+    return addr;
+    }
+
+void CSymgramSession::MigrateToDcL( TInt aDc )
+    {
+    if ( aDc < 1 || aDc > KDcMax )
+        {
+        FailL( KErrNotFound );
+        return;
+        }
+    iDcId = aDc;
+    iPhase = 0;
+    iAuthKey.Zero();
+    iAuthKeyId = 0;
+    iSalt = 0;
+    iSentAbridged = EFalse;
+    iResumeTries = 0;
+    TBuf<24> text;
+    text.Copy( KStatusDc );
+    text.AppendNum( aDc );
+    iObserver.SessionStatusL( text );
+    ResumeConnectL();
     }
 
 void CSymgramSession::ConnectL( const TDesC8& aPhone )
@@ -483,28 +3135,69 @@ void CSymgramSession::ConnectL( const TDesC8& aPhone )
         return;
         }
 
-    Cancel();
-    CloseSocket();
-    iConn.Close();
     iHave = 0;
     iPhase = 0;
-    iBusy = ETrue;
     iSentAbridged = EFalse;
     iResume = EFalse;
     iResumeTries = 0;
+    iTriedAddrSwap = EFalse;
     iSeq = 0;
     iLastMsgId = 0;
     iTimeOffset = 0;
-    iIn.Zero();
+    iIn->Des().Zero();
     iOut.Zero();
     iPhone.Copy( aPhone );
     iPhoneCodeHash.Zero();
     iHaveSrp = EFalse;
+    iDcId = 2;
+    iAuthKey.Zero();
+    iAuthKeyId = 0;
+    iSalt = 0;
+    BeginIapL();
+    }
+
+void CSymgramSession::StartSavedL()
+    {
+    if ( iBusy || !HasSavedSession() )
+        {
+        return;
+        }
+    if ( KSymgramApiId <= 0 || KSymgramApiHash().Length() == 0 )
+        {
+        iObserver.SessionErrorL( KNeedApi );
+        return;
+        }
+    TBuf8<8> sid;
+    sid.SetLength( 8 );
+    GenerateRandomBytesL( sid );
+    iSessionId = GetU64( sid.Ptr() );
+    iLastRpc.Zero();
+    iHaveSrp = EFalse;
+    iObserver.SessionStatusL( KStatusSaved );
+    iAuthed = ETrue;
+    BeginIapL();
+    }
+
+void CSymgramSession::BeginIapL()
+    {
+    Cancel();
+    CloseSocket();
+    iConn.Close();
+    iHave = 0;
+    iBusy = ETrue;
+    iSentAbridged = EFalse;
+    iResume = EFalse;
+    iResumeTries = 0;
+    iTriedAddrSwap = EFalse;
+    iSeq = 0;
+    iLastMsgId = 0;
+    iIn->Des().Zero();
+    iOut.Zero();
 
     User::LeaveIfError( iConn.Open( iServ ) );
 
     iPref = TCommDbConnPref();
-    iPref.SetDialogPreference( ECommDbDialogPrefPrompt );
+    iPref.SetDialogPreference( ECommDbDialogPrefDoNotPrompt );
     iPref.SetDirection( ECommDbConnectionDirectionOutgoing );
 
     iObserver.SessionStatusL( KStatusIap );
@@ -539,6 +3232,7 @@ TInt CSymgramSession::SubmitPasswordL( const TDesC8& aPassword )
         {
         return KErrInUse;
         }
+    iPwdUtf.Copy( aPassword.Left( iPwdUtf.MaxLength() ) );
     if ( IsActive() )
         {
         Cancel();
@@ -553,6 +3247,16 @@ TInt CSymgramSession::SubmitPasswordL( const TDesC8& aPassword )
     return KErrNone;
     }
 
+void CSymgramSession::ClearSrp()
+    {
+    if ( iSrp )
+        {
+        Mem::FillZ( iSrp, sizeof( TSrpWork ) );
+        delete iSrp;
+        iSrp = NULL;
+        }
+    }
+
 void CSymgramSession::StopPbkdf()
     {
     if ( iPbkdfIdle && iPbkdfIdle->IsActive() )
@@ -564,6 +3268,7 @@ void CSymgramSession::StopPbkdf()
     Mem::FillZ( iPbkdfPass, 32 );
     Mem::FillZ( iPbkdfU, 64 );
     Mem::FillZ( iPbkdfT, 64 );
+    ClearSrp();
     }
 
 void CSymgramSession::ReportPbkdfProgressL()
@@ -590,7 +3295,7 @@ TInt CSymgramSession::PbkdfCb( TAny* aPtr )
     {
     CSymgramSession* self = static_cast<CSymgramSession*>( aPtr );
     TInt cont = 0;
-    TRAPD( err, cont = self->PbkdfStep() );
+    TRAPD( err, cont = self->iSrp ? self->SrpStepL() : self->PbkdfStep() );
     if ( err != KErrNone )
         {
         TRAP_IGNORE( self->FailL( err ) );
@@ -604,8 +3309,8 @@ TInt CSymgramSession::PbkdfStep()
     const TInt left = KPbkdfIters - iPbkdfN;
     if ( left <= 0 )
         {
-        FinishPasswordL();
-        return 0;
+        StartSrpL();
+        return 1;
         }
     TInt chunk = KPbkdfChunk;
     if ( chunk > left )
@@ -617,8 +3322,8 @@ TInt CSymgramSession::PbkdfStep()
     ReportPbkdfProgressL();
     if ( iPbkdfN >= KPbkdfIters )
         {
-        FinishPasswordL();
-        return 0;
+        StartSrpL();
+        return 1;
         }
     return 1;
     }
@@ -631,7 +3336,8 @@ TInt CSymgramSession::StartPbkdfL( const TDesC8& aPassword )
         return KErrCorrupt;
         }
 
-    TUint8 cat[ 900 ];
+    TUint8* cat = (TUint8*)User::AllocL( 900 );
+    CleanupStack::PushL( cat );
     TInt n = 0;
     Mem::Copy( cat + n, iSalt1.Ptr(), iSalt1.Length() );
     n += iSalt1.Length();
@@ -651,6 +3357,7 @@ TInt CSymgramSession::StartPbkdfL( const TDesC8& aPassword )
     n += iSalt2.Length();
     TUint8 hash2[ 32 ];
     Sha256( cat, n, hash2 );
+    CleanupStack::PopAndDestroy( cat );
     Mem::Copy( iPbkdfPass, hash2, 32 );
 
     Pbkdf2HmacSha512Begin( iPbkdfPass, 32, iSalt1.Ptr(), iSalt1.Length(),
@@ -662,23 +3369,278 @@ TInt CSymgramSession::StartPbkdfL( const TDesC8& aPassword )
     return KErrNone;
     }
 
-void CSymgramSession::FinishPasswordL()
+void CSymgramSession::BeginSrpExp( const TBn& aBase, const TUint32* aExp,
+                                   TInt aLimbs )
     {
-    iPbkdfN = KPbkdfIters;
-    ReportPbkdfProgressL();
-    _LIT( KKey, "Счёт ключа..." );
-    iObserver.SessionStatusL( KKey );
-    TBuf8<256> A;
-    TBuf8<32> M1;
-    TInt err = FinishSrpL( A, M1 );
+    TInt n = aLimbs;
+    if ( n > 80 )
+        {
+        n = 80;
+        }
+    Mem::FillZ( iSrp->iExp, sizeof( iSrp->iExp ) );
+    Mem::Copy( iSrp->iExp, aExp, n * sizeof( TUint32 ) );
+    iSrp->iExpLimbs = n;
+    BnExpBegin( iSrp->iAcc, iSrp->iBaseM, iSrp->iN0inv, aBase, iSrp->iP );
+    BnExpMsb( iSrp->iExp, n, iSrp->iLimb, iSrp->iBit );
+    iSrp->iBitsTotal += iSrp->iLimb * 32 + iSrp->iBit + 1;
+    }
+
+void CSymgramSession::ReportSrpProgressL()
+    {
+    TInt pct = 0;
+    if ( iSrp && iSrp->iBitsTotal > 0 )
+        {
+        pct = ( iSrp->iBitsDone * 100 ) / iSrp->iBitsTotal;
+        if ( pct > 100 )
+            {
+            pct = 100;
+            }
+        }
+    TBuf<24> text;
+    _LIT( KKey, "Ключ " );
+    text.Copy( KKey );
+    text.AppendNum( pct );
+    text.Append( '%' );
+    iObserver.SessionStatusL( text );
+    }
+
+void CSymgramSession::StartSrpL()
+    {
+    const TInt pLen = iSrpP.Length();
+    if ( pLen < 64 || pLen > 256 || iSrpB.Length() < 1 )
+        {
+        FailL( KErrCorrupt );
+        return;
+        }
+
+    ClearSrp();
+    iSrp = new ( ELeave ) TSrpWork;
+    Mem::FillZ( iSrp, sizeof( TSrpWork ) );
+    iSrp->iStage = 1;
+
+    TUint8 cat[ 576 ];
+    TInt n = 0;
+    Mem::Copy( cat + n, iSalt2.Ptr(), iSalt2.Length() );
+    n += iSalt2.Length();
+    Mem::Copy( cat + n, iPbkdfT, 64 );
+    n += 64;
+    Mem::Copy( cat + n, iSalt2.Ptr(), iSalt2.Length() );
+    n += iSalt2.Length();
+    TUint8 xbytes[ 32 ];
+    Sha256( cat, n, xbytes );
     Mem::FillZ( iPbkdfPass, 32 );
     Mem::FillZ( iPbkdfU, 64 );
     Mem::FillZ( iPbkdfT, 64 );
-    if ( err != KErrNone )
+
+    iSrp->iP.FromBe( iSrpP.Ptr(), pLen );
+    iSrp->iG.Zero();
+    iSrp->iG.iD[ 0 ] = iSrpG;
+    iSrp->iX.FromBe( xbytes, 32 );
+    Mem::FillZ( xbytes, 32 );
+    BeginSrpExp( iSrp->iG, iSrp->iX.iD, KBnLimbs );
+    ReportSrpProgressL();
+    }
+
+TInt CSymgramSession::SrpStepL()
+    {
+    if ( !iSrp )
         {
-        FailL( err );
-        return;
+        return 0;
         }
+
+    const TInt remain = iSrp->iLimb * 32 + iSrp->iBit + 1;
+    const TBool done = BnExpStep( iSrp->iAcc, iSrp->iBaseM, iSrp->iP,
+                                  iSrp->iN0inv, iSrp->iExp,
+                                  iSrp->iLimb, iSrp->iBit, KSrpBitBudget );
+    if ( !done )
+        {
+        iSrp->iBitsDone += KSrpBitBudget;
+        ReportSrpProgressL();
+        return 1;
+        }
+    iSrp->iBitsDone += remain;
+    return SrpOnExpDoneL();
+    }
+
+TInt CSymgramSession::SrpOnExpDoneL()
+    {
+    if ( iSrp->iStage == 1 )
+        {
+        BnExpFinish( iSrp->iGx, iSrp->iAcc, iSrp->iP, iSrp->iN0inv );
+        TUint8 abytes[ 256 ];
+        TPtr8 abuf( abytes, 256, 256 );
+        abuf.SetLength( 256 );
+        GenerateRandomBytesL( abuf );
+        iSrp->iAexp.FromBe( abytes, 256 );
+        Mem::FillZ( abytes, 256 );
+        iSrp->iStage = 2;
+        BeginSrpExp( iSrp->iG, iSrp->iAexp.iD, KBnLimbs );
+        ReportSrpProgressL();
+        return 1;
+        }
+
+    if ( iSrp->iStage == 2 )
+        {
+        return SrpBeginSharedL();
+        }
+
+    BnExpFinish( iSrp->iS, iSrp->iAcc, iSrp->iP, iSrp->iN0inv );
+    FinishSrpSendL();
+    return 0;
+    }
+
+TInt CSymgramSession::SrpBeginSharedL()
+    {
+    BnExpFinish( iSrp->iA, iSrp->iAcc, iSrp->iP, iSrp->iN0inv );
+    TBn one;
+    one.Zero();
+    one.iD[ 0 ] = 1;
+    if ( iSrp->iA.IsZero() || iSrp->iA.Cmp( one ) <= 0 ||
+         iSrp->iA.Cmp( iSrp->iP ) >= 0 )
+        {
+        _LIT( KSrpA, "SRP A" );
+        FailTextL( KSrpA );
+        return 0;
+        }
+
+    const TInt pLen = iSrpP.Length();
+    iSrp->iA.ToBe( iSrp->iAp, pLen );
+
+    TUint8 gp[ 256 ];
+    iSrp->iG.ToBe( gp, pLen );
+    TUint8 pg[ 512 ];
+    Mem::Copy( pg, iSrpP.Ptr(), pLen );
+    Mem::Copy( pg + pLen, gp, pLen );
+    TUint8 kbytes[ 32 ];
+    Sha256( pg, pLen * 2, kbytes );
+    iSrp->iK.FromBe( kbytes, 32 );
+
+    TUint8 Bp[ 256 ];
+    PadBe( Bp, pLen, iSrpB.Ptr(), iSrpB.Length() );
+    TUint8 au[ 512 ];
+    Mem::Copy( au, iSrp->iAp, pLen );
+    Mem::Copy( au + pLen, Bp, pLen );
+    TUint8 ubytes[ 32 ];
+    Sha256( au, pLen * 2, ubytes );
+    iSrp->iU.FromBe( ubytes, 32 );
+    if ( iSrp->iU.IsZero() )
+        {
+        _LIT( KSrpU, "SRP U" );
+        FailTextL( KSrpU );
+        return 0;
+        }
+
+    iSrp->iB.FromBe( iSrpB.Ptr(), iSrpB.Length() );
+    if ( iSrp->iB.IsZero() || iSrp->iB.Cmp( one ) <= 0 ||
+         iSrp->iB.Cmp( iSrp->iP ) >= 0 )
+        {
+        _LIT( KSrpB, "SRP B" );
+        FailTextL( KSrpB );
+        return 0;
+        }
+
+    TBn kgx;
+    TBn base;
+    BnMulMod( kgx, iSrp->iK, iSrp->iGx, iSrp->iP );
+    BnSubMod( base, iSrp->iB, kgx, iSrp->iP );
+
+    TUint32 ux[ 16 ];
+    Mem::FillZ( ux, sizeof( ux ) );
+    TInt ii = 0;
+    for ( ii = 0; ii < 8; ii++ )
+        {
+        TUint64 c = 0;
+        TInt jj = 0;
+        for ( jj = 0; jj < 8; jj++ )
+            {
+            c += (TUint64)ux[ ii + jj ]
+               + (TUint64)iSrp->iU.iD[ ii ] * iSrp->iX.iD[ jj ];
+            ux[ ii + jj ] = (TUint32)c;
+            c >>= 32;
+            }
+        ux[ ii + 8 ] += (TUint32)c;
+        }
+
+    TUint32 exp[ 80 ];
+    TInt i = 0;
+    for ( i = 0; i < 80; i++ )
+        {
+        exp[ i ] = ( i < KBnLimbs ) ? iSrp->iAexp.iD[ i ] : 0;
+        }
+    TUint64 carry = 0;
+    for ( i = 0; i < 16; i++ )
+        {
+        carry += (TUint64)exp[ i ] + ux[ i ];
+        exp[ i ] = (TUint32)carry;
+        carry >>= 32;
+        }
+    for ( i = 16; i < 80 && carry; i++ )
+        {
+        carry += exp[ i ];
+        exp[ i ] = (TUint32)carry;
+        carry >>= 32;
+        }
+
+    iSrp->iStage = 3;
+    BeginSrpExp( base, exp, 80 );
+    ReportSrpProgressL();
+    return 1;
+    }
+
+void CSymgramSession::FinishSrpSendL()
+    {
+    const TInt pLen = iSrpP.Length();
+    TUint8 Sp[ 256 ];
+    iSrp->iS.ToBe( Sp, pLen );
+    TUint8 Khash[ 32 ];
+    Sha256( Sp, pLen, Khash );
+
+    TUint8 gp[ 256 ];
+    iSrp->iG.ToBe( gp, pLen );
+    TUint8 hp[ 32 ];
+    TUint8 hg[ 32 ];
+    Sha256( iSrpP.Ptr(), pLen, hp );
+    Sha256( gp, pLen, hg );
+    TUint8 xh[ 32 ];
+    TInt i = 0;
+    for ( i = 0; i < 32; i++ )
+        {
+        xh[ i ] = (TUint8)( hp[ i ] ^ hg[ i ] );
+        }
+    TUint8 hs1[ 32 ];
+    TUint8 hs2[ 32 ];
+    Sha256( iSalt1.Ptr(), iSalt1.Length(), hs1 );
+    Sha256( iSalt2.Ptr(), iSalt2.Length(), hs2 );
+
+    TUint8 m1in[ 640 ];
+    TInt n = 0;
+    Mem::Copy( m1in + n, xh, 32 );
+    n += 32;
+    Mem::Copy( m1in + n, hs1, 32 );
+    n += 32;
+    Mem::Copy( m1in + n, hs2, 32 );
+    n += 32;
+    Mem::Copy( m1in + n, iSrp->iAp, pLen );
+    n += pLen;
+    TUint8 Bp[ 256 ];
+    PadBe( Bp, pLen, iSrpB.Ptr(), iSrpB.Length() );
+    Mem::Copy( m1in + n, Bp, pLen );
+    n += pLen;
+    Mem::Copy( m1in + n, Khash, 32 );
+    n += 32;
+    TUint8 m1[ 32 ];
+    Sha256( m1in, n, m1 );
+
+    TBuf8<256> A;
+    TInt off = 0;
+    while ( off < pLen - 1 && iSrp->iAp[ off ] == 0 )
+        {
+        off++;
+        }
+    A.Append( iSrp->iAp + off, pLen - off );
+    TBuf8<32> M1;
+    M1.Append( m1, 32 );
+    ClearSrp();
 
     TBuf8<384> query;
     PutU32( query, KCheckPassword );
@@ -687,17 +3649,51 @@ void CSymgramSession::FinishPasswordL()
     TlAppendBytes( query, A.Ptr(), A.Length() );
     TlAppendBytes( query, M1.Ptr(), M1.Length() );
 
-    TBuf8<512> wrapped;
+    TBuf8<768> wrapped;
     WrapInitL( query, wrapped );
     iLastRpc.Copy( wrapped );
     iResumeTries = 0;
-    ResumeConnectL();
+    if ( iSocket.SubSessionHandle() )
+        {
+        SendEncryptedL( wrapped );
+        }
+    else
+        {
+        ResumeConnectL();
+        }
     }
 
 void CSymgramSession::RunL()
     {
     if ( iStatus.Int() != KErrNone )
         {
+        if ( iState == EStarting &&
+             iPref.DialogPreference() == ECommDbDialogPrefDoNotPrompt &&
+             iStatus.Int() != KErrCancel )
+            {
+            iPref.SetDialogPreference( ECommDbDialogPrefPrompt );
+            iConn.Close();
+            User::LeaveIfError( iConn.Open( iServ ) );
+            iObserver.SessionStatusL( KStatusIap );
+            iConn.Start( iPref, iStatus );
+            SetActive();
+            return;
+            }
+        if ( iState == EStarting && iStatus.Int() != KErrCancel )
+            {
+            // EKA2L1 stubs RConnection; TCP still works without an IAP.
+            iConn.Close();
+            BeginTcpConnectL();
+            return;
+            }
+        if ( ( iState == EConnecting || iState == EResuming ) &&
+             ShouldRetryAddrSwap( iStatus.Int() ) )
+            {
+            iTriedAddrSwap = ETrue;
+            iSwapDcAddr = !iSwapDcAddr;
+            BeginTcpConnectL();
+            return;
+            }
         if ( CanResume( iStatus.Int() ) )
             {
             ResumeConnectL();
@@ -711,14 +3707,7 @@ void CSymgramSession::RunL()
         {
         case EStarting:
             {
-            User::LeaveIfError( iSocket.Open( iServ, KAfInet, KSockStream,
-                                              KProtocolInetTcp, iConn ) );
-            iAddr.SetAddress( KDc2 );
-            iAddr.SetPort( KDcPort );
-            iObserver.SessionStatusL( KStatusConn );
-            iState = EConnecting;
-            iSocket.Connect( iAddr, iStatus );
-            SetActive();
+            BeginTcpConnectL();
             break;
             }
         case EConnecting:
@@ -731,6 +3720,12 @@ void CSymgramSession::RunL()
                 iResume = EFalse;
                 SendEncryptedL( iLastRpc );
                 }
+            else if ( iPhase >= 3 && iAuthKeyId != 0 )
+                {
+                iResume = EFalse;
+                iObserver.SessionSignedInL();
+                SendGetDialogsL();
+                }
             else
                 {
                 iResume = EFalse;
@@ -740,24 +3735,27 @@ void CSymgramSession::RunL()
             }
         case EWriting:
             iHave = 0;
-            iIn.Zero();
-            if ( iHaveSrp )
+            iIn->Des().Zero();
+            if ( !iAuthed )
                 {
-                iObserver.SessionStatusL( KStatusPwd );
-                }
-            else if ( iPhoneCodeHash.Length() )
-                {
-                iObserver.SessionStatusL( KStatusWait );
-                }
-            else
-                {
-                iObserver.SessionStatusL( KStatusCode );
+                if ( iHaveSrp )
+                    {
+                    iObserver.SessionStatusL( KStatusPwd );
+                    }
+                else if ( iPhoneCodeHash.Length() )
+                    {
+                    iObserver.SessionStatusL( KStatusWait );
+                    }
+                else
+                    {
+                    iObserver.SessionStatusL( KStatusCode );
+                    }
                 }
             ReadMoreL();
             break;
         case EReading:
             iHave += iRead.Length();
-            iIn.SetLength( iHave );
+            iIn->Des().SetLength( iHave );
             HandleIncomingL();
             break;
         default:
@@ -845,6 +3843,12 @@ void CSymgramSession::WritePacketL( const TDesC8& aPayload )
         iSentAbridged = ETrue;
         }
     const TInt words = aPayload.Length() / 4;
+    if ( 8 + aPayload.Length() > iOut.MaxLength() )
+        {
+        _LIT( KBig, "Пакет слишком большой" );
+        FailTextL( KBig );
+        return;
+        }
     if ( words < 0x7f )
         {
         iOut.Append( (TUint8)words );
@@ -863,17 +3867,44 @@ void CSymgramSession::WritePacketL( const TDesC8& aPayload )
     SetActive();
     }
 
-void CSymgramSession::ReadMoreL()
+void CSymgramSession::EnsureInL( TInt aNeed )
     {
-    if ( iHave >= iIn.MaxLength() )
+    if ( aNeed <= iIn->Des().MaxLength() )
         {
-        FailL( KErrOverflow );
         return;
         }
+    if ( aNeed > KMaxIn )
+        {
+        _LIT( KBig, "Пакет слишком большой" );
+        FailTextL( KBig );
+        return;
+        }
+    TInt cap = iIn->Des().MaxLength();
+    while ( cap < aNeed )
+        {
+        cap *= 2;
+        }
+    if ( cap > KMaxIn )
+        {
+        cap = KMaxIn;
+        }
+    iIn = iIn->ReAllocL( cap );
+    }
 
-    iRead.Set( const_cast<TUint8*>( iIn.Ptr() ) + iHave,
+void CSymgramSession::ReadMoreL()
+    {
+    if ( iHave >= iIn->Des().MaxLength() )
+        {
+        EnsureInL( iHave + 2048 );
+        if ( iHave >= iIn->Des().MaxLength() )
+            {
+            return;
+            }
+        }
+
+    iRead.Set( const_cast<TUint8*>( iIn->Ptr() ) + iHave,
                0,
-               iIn.MaxLength() - iHave );
+               iIn->Des().MaxLength() - iHave );
     iState = EReading;
     iSocket.RecvOneOrMore( iRead, 0, iStatus, iXfrLen );
     SetActive();
@@ -891,7 +3922,7 @@ void CSymgramSession::HandleIncomingL()
 
         TInt header = 1;
         TInt words = 0;
-        const TUint8 first = iIn[ 0 ];
+        const TUint8 first = ( *iIn )[ 0 ];
         if ( first < 0x7f )
             {
             words = first;
@@ -903,9 +3934,9 @@ void CSymgramSession::HandleIncomingL()
                 ReadMoreL();
                 return;
                 }
-            words = iIn[ 1 ]
-                  | ( iIn[ 2 ] << 8 )
-                  | ( iIn[ 3 ] << 16 );
+            words = ( *iIn )[ 1 ]
+                  | ( ( *iIn )[ 2 ] << 8 )
+                  | ( ( *iIn )[ 3 ] << 16 );
             header = 4;
             }
         else
@@ -914,10 +3945,18 @@ void CSymgramSession::HandleIncomingL()
             }
 
         const TInt need = header + words * 4;
-        if ( need <= header || need > iIn.MaxLength() )
+        if ( need <= header )
             {
             FailL( KErrCorrupt );
             return;
+            }
+        if ( need > iIn->Des().MaxLength() )
+            {
+            EnsureInL( need );
+            if ( need > iIn->Des().MaxLength() )
+                {
+                return;
+                }
             }
         if ( iHave < need )
             {
@@ -925,7 +3964,7 @@ void CSymgramSession::HandleIncomingL()
             return;
             }
 
-        const TUint8* p = iIn.Ptr() + header;
+        const TUint8* p = iIn->Ptr() + header;
         const TInt len = words * 4;
         if ( iPhase < 3 )
             {
@@ -950,12 +3989,11 @@ void CSymgramSession::HandleIncomingL()
         const TInt left = iHave - need;
         if ( left > 0 )
             {
-            TBuf8<4096> tmp;
-            tmp.Copy( iIn.Mid( need, left ) );
-            iIn.Copy( tmp );
+            Mem::Move( const_cast<TUint8*>( iIn->Ptr() ),
+                       iIn->Ptr() + need, left );
             }
         iHave = left;
-        iIn.SetLength( iHave );
+        iIn->Des().SetLength( iHave );
 
         if ( iState == EWriting )
             {
@@ -1167,7 +4205,7 @@ void CSymgramSession::SendDhParamsL()
     inner.Append( iNonce );
     inner.Append( iServerNonce );
     inner.Append( iNewNonce );
-    PutU32( inner, KDcId );
+    PutU32( inner, iDcId );
 
     TBuf8<256> encrypted;
     TInt err = KErrAbort;
@@ -1317,35 +4355,34 @@ void CSymgramSession::HandleServerDhL( const TUint8* aBody, TInt aLen )
 
     iTimeOffset = serverTime - UnixNow();
 
-    TBn dhP, dhG, dhB, dhGa, dhGb, dhAk;
-    dhP.FromBe( prime, primeLen );
-    dhG.Zero();
-    dhG.iD[ 0 ] = g;
-    dhGa.FromBe( ga, gaLen );
-    if ( dhGa.IsZero() || dhGa.Cmp( dhP ) >= 0 )
+    TDhWork* dh = new ( ELeave ) TDhWork;
+    CleanupStack::PushL( dh );
+    dh->iP.FromBe( prime, primeLen );
+    dh->iG.Zero();
+    dh->iG.iD[ 0 ] = g;
+    dh->iGa.FromBe( ga, gaLen );
+    if ( dh->iGa.IsZero() || dh->iGa.Cmp( dh->iP ) >= 0 )
         {
-        CleanupStack::PopAndDestroy( dec );
-        FailL( KErrCorrupt );
+        CleanupStack::PopAndDestroy( 2, dec );
+        _LIT( KDhGa, "DH Ga" );
+        FailTextL( KDhGa );
         return;
         }
 
-    TUint8 bbytes[ 256 ];
-    TPtr8 bb( bbytes, 256, 256 );
+    TPtr8 bb( dh->iBbytes, 256, 256 );
     bb.SetLength( 256 );
     GenerateRandomBytesL( bb );
-    dhB.FromBe( bbytes, 256 );
+    dh->iB.FromBe( dh->iBbytes, 256 );
 
-    BnModExp( dhGb, dhG, dhB, dhP );
-    BnModExp( dhAk, dhGa, dhB, dhP );
+    BnModExp( dh->iGb, dh->iG, dh->iB, dh->iP );
+    BnModExp( dh->iAk, dh->iGa, dh->iB, dh->iP );
 
-    TUint8 akb[ 256 ];
-    dhAk.ToBe( akb, 256 );
-    iAuthKey.Copy( akb, 256 );
+    dh->iAk.ToBe( dh->iAkb, 256 );
+    iAuthKey.Copy( dh->iAkb, 256 );
 
-    TUint8 gb[ 256 ];
-    dhGb.ToBe( gb, 256 );
+    dh->iGb.ToBe( dh->iGbb, 256 );
     TInt goff = 0;
-    while ( goff < 255 && gb[ goff ] == 0 )
+    while ( goff < 255 && dh->iGbb[ goff ] == 0 )
         {
         goff++;
         }
@@ -1355,7 +4392,7 @@ void CSymgramSession::HandleServerDhL( const TUint8* aBody, TInt aLen )
     inner.Append( iNonce );
     inner.Append( iServerNonce );
     PutU64( inner, 0 );
-    TlAppendBytes( inner, gb + goff, 256 - goff );
+    TlAppendBytes( inner, dh->iGbb + goff, 256 - goff );
 
     TUint8 innerHash[ 20 ];
     Sha1( inner.Ptr(), inner.Length(), innerHash );
@@ -1384,7 +4421,7 @@ void CSymgramSession::HandleServerDhL( const TUint8* aBody, TInt aLen )
 
     TBuf8<600> payload;
     BuildUnencryptedL( body, payload );
-    CleanupStack::PopAndDestroy( dec );
+    CleanupStack::PopAndDestroy( 2, dec );
     iPhase = 2;
     WritePacketL( payload );
     }
@@ -1393,13 +4430,15 @@ void CSymgramSession::HandleDhGenL( const TUint8* aBody, TInt aLen )
     {
     if ( aLen < 52 || GetU32( aBody ) != KDhGenOk )
         {
-        FailL( KErrCorrupt );
+        _LIT( KDhOk, "DH ответ" );
+        FailTextL( KDhOk );
         return;
         }
     if ( Mem::Compare( aBody + 4, 16, iNonce.Ptr(), 16 ) != 0 ||
          Mem::Compare( aBody + 20, 16, iServerNonce.Ptr(), 16 ) != 0 )
         {
-        FailL( KErrCorrupt );
+        _LIT( KDhNonce, "DH nonce" );
+        FailTextL( KDhNonce );
         return;
         }
 
@@ -1413,7 +4452,8 @@ void CSymgramSession::HandleDhGenL( const TUint8* aBody, TInt aLen )
     Sha1( nn, 41, h );
     if ( Mem::Compare( h + 4, 16, aBody + 36, 16 ) != 0 )
         {
-        FailL( KErrCorrupt );
+        _LIT( KDhHash, "Ключ DH" );
+        FailTextL( KDhHash );
         return;
         }
 
@@ -1466,25 +4506,28 @@ void CSymgramSession::DeriveAes( TInt aX, const TUint8 aMsgKey[ 16 ],
 
 void CSymgramSession::SendEncryptedL( const TDesC8& aMsg )
     {
-    TBuf8<1024> plain;
+    const TInt inner = 32 + aMsg.Length();
+    TInt pad = 16 - ( inner % 16 );
+    if ( pad < 12 )
+        {
+        pad += 16;
+        }
+    const TInt plainLen = inner + pad;
+    HBufC8* plainBuf = HBufC8::NewLC( plainLen );
+    TPtr8 plain = plainBuf->Des();
     PutU64( plain, iSalt );
     PutU64( plain, iSessionId );
     PutU64( plain, MessageId() );
     PutU32( plain, SeqNo() );
     PutU32( plain, aMsg.Length() );
     plain.Append( aMsg );
-
-    TInt pad = 16 - ( plain.Length() % 16 );
-    if ( pad < 12 )
-        {
-        pad += 16;
-        }
     TBuf8<32> padding;
     padding.SetLength( pad );
     GenerateRandomBytesL( padding );
     plain.Append( padding );
 
-    TBuf8<1088> mk;
+    HBufC8* mkBuf = HBufC8::NewLC( 32 + plain.Length() );
+    TPtr8 mk = mkBuf->Des();
     mk.Append( iAuthKey.Ptr() + 88, 32 );
     mk.Append( plain );
     TUint8 sha[ 32 ];
@@ -1496,16 +4539,19 @@ void CSymgramSession::SendEncryptedL( const TDesC8& aMsg )
     TUint8 aesIv[ 32 ];
     DeriveAes( 0, msgKey, aesKey, aesIv );
 
-    TBuf8<1024> enc;
+    HBufC8* encBuf = HBufC8::NewLC( plain.Length() );
+    TPtr8 enc = encBuf->Des();
     enc.SetLength( plain.Length() );
     Aes256IgeEncrypt( plain.Ptr(), const_cast<TUint8*>( enc.Ptr() ),
                       plain.Length(), aesKey, aesIv );
 
-    TBuf8<1100> packet;
+    HBufC8* packetBuf = HBufC8::NewLC( 24 + enc.Length() );
+    TPtr8 packet = packetBuf->Des();
     PutU64( packet, iAuthKeyId );
     packet.Append( msgKey, 16 );
     packet.Append( enc );
     WritePacketL( packet );
+    CleanupStack::PopAndDestroy( 4, plainBuf );
     }
 
 void CSymgramSession::SendSendCodeL()
@@ -1605,10 +4651,9 @@ void CSymgramSession::SendGetDialogsL()
     PutU32( query, 0 );
     TBuf8<384> wrapped;
     WrapInitL( query, wrapped );
-    iLastRpc.Copy( wrapped );
-    iBusy = ETrue;
+    iRpc = ERpcDialogs;
     iObserver.SessionStatusL( KStatusChats );
-    SendEncryptedL( wrapped );
+    SendRpcL( wrapped );
     }
 
 void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
@@ -1616,9 +4661,7 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
     TInt o = 0;
     if ( aLen < 8 )
         {
-        iBusy = EFalse;
-        iState = EIdle;
-        iObserver.SessionClearChatsL();
+        SendGetContactsL();
         return;
         }
     const TUint32 root = GetU32( aP );
@@ -1627,23 +4670,20 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
         {
         if ( Need( o, aLen, 4 ) != KErrNone )
             {
-            iBusy = EFalse;
-            iState = EIdle;
+            SendGetContactsL();
             return;
             }
         o += 4;
         }
     else if ( root != KDialogs )
         {
-        iBusy = EFalse;
-        iState = EIdle;
+        SendGetContactsL();
         return;
         }
 
     if ( Need( o, aLen, 8 ) != KErrNone || GetU32( aP + o ) != KTlVector )
         {
-        iBusy = EFalse;
-        iState = EIdle;
+        SendGetContactsL();
         return;
         }
     const TInt dcount = (TInt)GetU32( aP + o + 4 );
@@ -1653,7 +4693,9 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
         {
         TInt iKind;
         TInt64 iId;
+        TInt64 iHash;
         TInt iUnread;
+        TInt iTopMsg;
         };
     TDlg dlg[ 30 ];
     TInt got = 0;
@@ -1682,6 +4724,7 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
             {
             break;
             }
+        const TInt topMsg = GetI32( aP + o );
         o += 12;
         const TInt unread = (TInt)GetU32( aP + o );
         o += 12;
@@ -1727,294 +4770,510 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
             }
         dlg[ got ].iKind = kind;
         dlg[ got ].iId = id;
+        dlg[ got ].iHash = 0;
         dlg[ got ].iUnread = unread;
+        dlg[ got ].iTopMsg = topMsg;
         got++;
         }
 
-    struct TNm
+    struct TMsg
         {
-        TInt64 iId;
-        TBuf<40> iName;
+        TInt iId;
+        TInt iDate;
+        TBuf<80> iText;
         };
-    TNm names[ 40 ];
-    TInt nnames = 0;
-    while ( o + 12 <= aLen && nnames < 40 )
+    TMsg msgs[ 30 ];
+    TInt nmsgs = 0;
+    const TInt afterDialogs = o;
+    if ( Need( o, aLen, 8 ) == KErrNone && GetU32( aP + o ) == KTlVector )
         {
-        const TUint32 c = GetU32( aP + o );
-        if ( c == 0xabb5f120u || c == 0x8f97c628u )
+        const TInt mcount = (TInt)GetU32( aP + o + 4 );
+        o += 8;
+        TInt scan = o;
+        while ( scan + 16 <= aLen && nmsgs < 30 && nmsgs < mcount )
             {
-            o += 4;
-            if ( Need( o, aLen, 16 ) != KErrNone )
+            const TUint32 c = GetU32( aP + scan );
+            if ( c == 0x38116ee0u || c == 0x2b085862u ||
+                 c == 0x90a6ca84u || c == 0x83e5de54u )
                 {
-                break;
-                }
-            const TUint32 flags = GetU32( aP + o );
-            o += 4;
-            o += 4;
-            const TInt64 id = (TInt64)GetU64( aP + o );
-            o += 8;
-            if ( ( flags & 1 ) != 0 )
-                {
-                if ( Need( o, aLen, 8 ) != KErrNone )
+                TInt t = scan;
+                TInt id = 0;
+                TInt date = 0;
+                TBuf<80> text;
+                if ( ReadMessagePreview( aP, aLen, t, id, date, text ) ==
+                     KErrNone )
                     {
-                    break;
+                    if ( id != 0 &&
+                         date > 1000000000 && date < 2000000000 )
+                        {
+                        msgs[ nmsgs ].iId = id;
+                        msgs[ nmsgs ].iDate = date;
+                        msgs[ nmsgs ].iText.Copy(
+                            text.Left( msgs[ nmsgs ].iText.MaxLength() ) );
+                        nmsgs++;
+                        }
+                    scan = t;
+                    continue;
                     }
-                o += 8;
                 }
-            TBuf<40> first;
-            TBuf<40> last;
-            if ( ( flags & 2 ) != 0 && ReadStr( aP, aLen, o, first ) != KErrNone )
-                {
-                break;
-                }
-            if ( ( flags & 4 ) != 0 && ReadStr( aP, aLen, o, last ) != KErrNone )
-                {
-                break;
-                }
-            names[ nnames ].iId = id;
-            names[ nnames ].iName.Copy( first );
-            if ( last.Length() > 0 &&
-                 names[ nnames ].iName.Length() + 1 + last.Length() <=
-                 names[ nnames ].iName.MaxLength() )
-                {
-                names[ nnames ].iName.Append( ' ' );
-                names[ nnames ].iName.Append( last );
-                }
-            nnames++;
-            continue;
+            scan += 4;
             }
-        if ( c == 0x41cbf256u || c == 0x83259464u || c == 0x8261ac61u )
+        o = afterDialogs;
+        }
+
+    TPeerName names[ 40 ];
+    TInt nnames = 0;
+    TInt hunt = afterDialogs;
+    while ( hunt + 16 <= aLen )
+        {
+        if ( GetU32( aP + hunt ) == KTlVector )
             {
-            o += 4;
+            const TUint32 next = GetU32( aP + hunt + 8 );
+            if ( IsChatCtor( next ) || IsUserCtor( next ) )
+                {
+                break;
+                }
+            }
+        hunt += 4;
+        }
+    o = hunt;
+    if ( hunt + 16 <= aLen && GetU32( aP + hunt ) == KTlVector &&
+         IsChatCtor( GetU32( aP + hunt + 8 ) ) )
+        {
+        const TInt ccount = (TInt)GetU32( aP + hunt + 4 );
+        o = hunt + 8;
+        TInt ci = 0;
+        for ( ci = 0; ci < ccount && nnames < 40; ci++ )
+            {
+            TPeerName one;
+            if ( !ConsumeChat( aP, aLen, o, one ) )
+                {
+                break;
+                }
+            names[ nnames ].iId = one.iId;
+            names[ nnames ].iHash = one.iHash;
+            names[ nnames ].iKind = one.iKind;
+            names[ nnames ].iName.Copy( one.iName );
+            names[ nnames ].iSelf = EFalse;
+            names[ nnames ].iDeleted = EFalse;
+            nnames++;
+            }
+        }
+    if ( !( Need( o, aLen, 8 ) == KErrNone && GetU32( aP + o ) == KTlVector &&
+            IsUserCtor( GetU32( aP + o + 8 ) ) ) )
+        {
+        hunt = o;
+        while ( hunt + 16 <= aLen )
+            {
+            if ( GetU32( aP + hunt ) == KTlVector &&
+                 IsUserCtor( GetU32( aP + hunt + 8 ) ) )
+                {
+                o = hunt;
+                break;
+                }
+            hunt += 4;
+            }
+        }
+    if ( Need( o, aLen, 8 ) == KErrNone && GetU32( aP + o ) == KTlVector &&
+         IsUserCtor( GetU32( aP + o + 8 ) ) )
+        {
+        const TInt ucount = (TInt)GetU32( aP + o + 4 );
+        o += 8;
+        TInt ui = 0;
+        for ( ui = 0; ui < ucount && nnames < 40; ui++ )
+            {
+            TPeerName one;
+            if ( !ConsumeUser( aP, aLen, o, one ) )
+                {
+                break;
+                }
+            names[ nnames ].iId = one.iId;
+            names[ nnames ].iHash = one.iHash;
+            names[ nnames ].iKind = one.iKind;
+            names[ nnames ].iName.Copy( one.iName );
+            names[ nnames ].iSelf = one.iSelf;
+            names[ nnames ].iDeleted = one.iDeleted;
+            nnames++;
+            }
+        }
+
+    for ( i = 0; i < got; i++ )
+        {
+        TSymgramChat chat;
+        chat.iId = dlg[ i ].iId;
+        chat.iHash = dlg[ i ].iHash;
+        chat.iPeerKind = dlg[ i ].iKind;
+        chat.iUnread = dlg[ i ].iUnread;
+        chat.iDate = 0;
+        _LIT( KDlg, "Диалог" );
+        chat.iName.Copy( KDlg );
+        TInt k = 0;
+        for ( k = 0; k < nnames; k++ )
+            {
+            if ( names[ k ].iId == dlg[ i ].iId &&
+                 NameFits( dlg[ i ].iKind, names[ k ].iKind ) )
+                {
+                if ( names[ k ].iName.Length() > 0 )
+                    {
+                    chat.iName.Copy( names[ k ].iName );
+                    }
+                if ( names[ k ].iHash != 0 )
+                    {
+                    chat.iHash = names[ k ].iHash;
+                    }
+                if ( names[ k ].iKind != 0 )
+                    {
+                    chat.iPeerKind = names[ k ].iKind;
+                    }
+                break;
+                }
+            }
+        TInt m = 0;
+        for ( m = 0; m < nmsgs; m++ )
+            {
+            if ( msgs[ m ].iId == dlg[ i ].iTopMsg )
+                {
+                FormatHm( msgs[ m ].iDate, chat.iTime );
+                chat.iDate = msgs[ m ].iDate;
+                if ( msgs[ m ].iText.Length() > 0 )
+                    {
+                    chat.iPreview.Copy( msgs[ m ].iText );
+                    }
+                break;
+                }
+            }
+        iObserver.SessionAddChatL( chat );
+        }
+    SaveSession();
+    iObserver.SessionChatsReadyL();
+    SendGetContactsL();
+    }
+
+void CSymgramSession::SendGetContactsL()
+    {
+    TBuf8<16> query;
+    PutU32( query, KGetContacts );
+    PutU64( query, 0 );
+    TBuf8<384> wrapped;
+    WrapInitL( query, wrapped );
+    iRpc = ERpcContacts;
+    iObserver.SessionStatusL( KStatusContacts );
+    SendRpcL( wrapped );
+    }
+
+void CSymgramSession::HandleContactsL( const TUint8* aP, TInt aLen )
+    {
+    TInt o = 0;
+    _LIT( KOn, "В сети" );
+    if ( aLen < 4 )
+        {
+        iBusy = EFalse;
+        iState = EIdle;
+        iObserver.SessionStatusL( KOn );
+        return;
+        }
+    const TUint32 root = GetU32( aP );
+    o = 4;
+    TBool hasSaved = EFalse;
+    if ( root == KContacts )
+        {
+        hasSaved = ETrue;
+        }
+    else if ( root != KContactsOld )
+        {
+        iBusy = EFalse;
+        iState = EIdle;
+        iObserver.SessionStatusL( KOn );
+        return;
+        }
+
+    if ( Need( o, aLen, 8 ) != KErrNone || GetU32( aP + o ) != KTlVector )
+        {
+        iBusy = EFalse;
+        iState = EIdle;
+        iObserver.SessionStatusL( KOn );
+        return;
+        }
+    const TInt ncont = (TInt)GetU32( aP + o + 4 );
+    o += 8;
+    TInt i = 0;
+    for ( i = 0; i < ncont; i++ )
+        {
+        if ( Need( o, aLen, 4 ) != KErrNone )
+            {
+            break;
+            }
+        const TUint32 c = GetU32( aP + o );
+        o += 4;
+        if ( c == KContact )
+            {
             if ( Need( o, aLen, 12 ) != KErrNone )
                 {
                 break;
                 }
-            o += 4;
-            if ( c != 0x41cbf256u )
-                {
-                o += 4;
-                }
-            const TInt64 id = (TInt64)GetU64( aP + o );
-            o += 8;
-            if ( c != 0x41cbf256u )
-                {
-                const TUint32 fl = GetU32( aP + o - 12 );
-                if ( ( fl & ( 1u << 13 ) ) != 0 )
-                    {
-                    if ( Need( o, aLen, 8 ) != KErrNone )
-                        {
-                        break;
-                        }
-                    o += 8;
-                    }
-                }
-            TBuf<40> title;
-            if ( ReadStr( aP, aLen, o, title ) != KErrNone )
+            o += 12;
+            }
+        else if ( c == KContactOld )
+            {
+            if ( Need( o, aLen, 8 ) != KErrNone )
                 {
                 break;
                 }
-            names[ nnames ].iId = id;
-            names[ nnames ].iName.Copy( title );
-            nnames++;
-            continue;
+            o += 8;
+            }
+        else
+            {
+            break;
+            }
+        }
+    if ( hasSaved )
+        {
+        if ( Need( o, aLen, 4 ) != KErrNone )
+            {
+            iBusy = EFalse;
+            iState = EIdle;
+            iObserver.SessionStatusL( KOn );
+            return;
             }
         o += 4;
         }
-
-    iObserver.SessionClearChatsL();
-    for ( i = 0; i < got; i++ )
+    if ( Need( o, aLen, 8 ) != KErrNone || GetU32( aP + o ) != KTlVector )
         {
-        TBuf<40> name;
-        _LIT( KDlg, "Диалог" );
-        name.Copy( KDlg );
-        TInt k = 0;
-        for ( k = 0; k < nnames; k++ )
+        iBusy = EFalse;
+        iState = EIdle;
+        iObserver.SessionStatusL( KOn );
+        return;
+        }
+    const TInt nusers = (TInt)GetU32( aP + o + 4 );
+    o += 8;
+    iObserver.SessionClearContactsL();
+    for ( i = 0; i < nusers; i++ )
+        {
+        TPeerName one;
+        if ( !ConsumeUser( aP, aLen, o, one ) )
             {
-            if ( names[ k ].iId == dlg[ i ].iId )
-                {
-                name.Copy( names[ k ].iName );
-                break;
-                }
+            break;
             }
-        TBuf<80> preview;
-        if ( dlg[ i ].iUnread > 0 )
+        if ( one.iSelf || one.iDeleted || one.iId == 0 )
             {
-            preview.AppendNum( dlg[ i ].iUnread );
+            continue;
             }
-        iObserver.SessionAddChatL( name, preview, dlg[ i ].iUnread );
+        TSymgramContact cont;
+        cont.iId = one.iId;
+        cont.iHash = one.iHash;
+        if ( one.iName.Length() == 0 )
+            {
+            _LIT( KUser, "Контакт" );
+            cont.iName.Copy( KUser );
+            }
+        else
+            {
+            cont.iName.Copy( one.iName );
+            }
+        iObserver.SessionAddContactL( cont );
         }
     iBusy = EFalse;
     iState = EIdle;
-    _LIT( KOn, "В сети" );
+    iRpc = ERpcNone;
     iObserver.SessionStatusL( KOn );
+    iObserver.SessionContactsReadyL();
+    FlushPendingL();
     }
 
-TInt CSymgramSession::FinishSrpL( TDes8& aA, TDes8& aM1 )
+void CSymgramSession::HandleHistoryL( const TUint8* aP, TInt aLen )
     {
-    const TInt pLen = iSrpP.Length();
-    if ( pLen < 64 || pLen > 256 || iSrpB.Length() < 1 )
+    TInt o = 4;
+    const TUint32 root = GetU32( aP );
+    if ( root == KMessagesSlice )
         {
-        return KErrCorrupt;
+        o += 4;
         }
-
-    TUint8 cat[ 900 ];
-    TInt n = 0;
-    Mem::Copy( cat + n, iSalt2.Ptr(), iSalt2.Length() );
-    n += iSalt2.Length();
-    Mem::Copy( cat + n, iPbkdfT, 64 );
-    n += 64;
-    Mem::Copy( cat + n, iSalt2.Ptr(), iSalt2.Length() );
-    n += iSalt2.Length();
-    TUint8 xbytes[ 32 ];
-    Sha256( cat, n, xbytes );
-
-    TBn p, g, x, gx, kbn, B, A, a, u, kgx, base, S;
-    p.FromBe( iSrpP.Ptr(), pLen );
-    g.Zero();
-    g.iD[ 0 ] = iSrpG;
-    x.FromBe( xbytes, 32 );
-    BnModExp( gx, g, x, p );
-
-    TUint8 gp[ 256 ];
-    g.ToBe( gp, pLen );
-    TUint8 pg[ 512 ];
-    Mem::Copy( pg, iSrpP.Ptr(), pLen );
-    Mem::Copy( pg + pLen, gp, pLen );
-    TUint8 kbytes[ 32 ];
-    Sha256( pg, pLen * 2, kbytes );
-    kbn.FromBe( kbytes, 32 );
-
-    TUint8 abytes[ 256 ];
-    TPtr8 abuf( abytes, 256, 256 );
-    abuf.SetLength( 256 );
-    TRAPD( err, GenerateRandomBytesL( abuf ) );
-    if ( err != KErrNone )
+    else if ( root == KChannelMsgs )
         {
-        return err;
+        o += 12;
         }
-    a.FromBe( abytes, 256 );
-    BnModExp( A, g, a, p );
-
-    TBn one;
-    one.Zero();
-    one.iD[ 0 ] = 1;
-    if ( A.IsZero() || A.Cmp( one ) <= 0 || A.Cmp( p ) >= 0 )
+    else if ( root != KMessages )
         {
-        return KErrCorrupt;
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        FlushPendingL();
+        return;
         }
-
-    TUint8 Ap[ 256 ];
-    TUint8 Bp[ 256 ];
-    A.ToBe( Ap, pLen );
-    PadBe( Bp, pLen, iSrpB.Ptr(), iSrpB.Length() );
-    TUint8 au[ 512 ];
-    Mem::Copy( au, Ap, pLen );
-    Mem::Copy( au + pLen, Bp, pLen );
-    TUint8 ubytes[ 32 ];
-    Sha256( au, pLen * 2, ubytes );
-    u.FromBe( ubytes, 32 );
-    if ( u.IsZero() )
+    if ( Need( o, aLen, 8 ) != KErrNone || GetU32( aP + o ) != KTlVector )
         {
-        return KErrCorrupt;
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        FlushPendingL();
+        return;
         }
-
-    B.FromBe( iSrpB.Ptr(), iSrpB.Length() );
-    if ( B.IsZero() || B.Cmp( one ) <= 0 || B.Cmp( p ) >= 0 )
+    const TInt mcount = (TInt)GetU32( aP + o + 4 );
+    o += 8;
+    iObserver.SessionBeginMessagesL( iPeerId );
+    TInt scan = o;
+    TInt got = 0;
+    TPreview buf[ 12 ];
+    while ( scan + 16 <= aLen && got < 12 && got < mcount )
         {
-        return KErrCorrupt;
-        }
-
-    BnMulMod( kgx, kbn, gx, p );
-    BnSubMod( base, B, kgx, p );
-
-    TUint32 ux[ 16 ];
-    TInt i = 0;
-    for ( i = 0; i < 16; i++ )
-        {
-        ux[ i ] = 0;
-        }
-    TInt ii = 0;
-    for ( ii = 0; ii < 8; ii++ )
-        {
-        TUint64 c = 0;
-        TInt jj = 0;
-        for ( jj = 0; jj < 8; jj++ )
+        const TUint32 c = GetU32( aP + scan );
+        if ( c == 0x38116ee0u || c == 0x2b085862u ||
+             c == 0x90a6ca84u || c == 0x83e5de54u )
             {
-            c += (TUint64)ux[ ii + jj ] + (TUint64)u.iD[ ii ] * x.iD[ jj ];
-            ux[ ii + jj ] = (TUint32)c;
-            c >>= 32;
+            TInt t = scan;
+            TPreview one;
+            if ( ReadMessage( aP, aLen, t, one ) == KErrNone )
+                {
+                if ( one.iId != 0 &&
+                     one.iDate > 1000000000 && one.iDate < 2000000000 )
+                    {
+                    buf[ got ] = one;
+                    got++;
+                    }
+                scan = t;
+                continue;
+                }
             }
-        ux[ ii + 8 ] += (TUint32)c;
+        scan += 4;
         }
-
-    TUint32 exp[ 80 ];
-    for ( i = 0; i < 80; i++ )
+    TInt i = 0;
+    for ( i = got - 1; i >= 0; i-- )
         {
-        exp[ i ] = ( i < KBnLimbs ) ? a.iD[ i ] : 0;
+        TSymgramMsg m;
+        m.iId = buf[ i ].iId;
+        m.iDate = buf[ i ].iDate;
+        m.iOut = buf[ i ].iOut;
+        m.iKind = buf[ i ].iKind;
+        m.iDuration = buf[ i ].iDuration;
+        m.iPhotoLoc = buf[ i ].iPhotoLoc;
+        m.iFileId = buf[ i ].iFileId;
+        m.iFileHash = buf[ i ].iFileHash;
+        m.iFileRef.Copy( buf[ i ].iFileRef );
+        m.iFileName.Copy( buf[ i ].iFileName );
+        m.iText.Copy( buf[ i ].iText.Left( m.iText.MaxLength() ) );
+        m.iBmp = NULL;
+        iObserver.SessionAddMessageL( m );
         }
-    TUint64 carry = 0;
-    for ( i = 0; i < 16; i++ )
+    iBusy = EFalse;
+    iRpc = ERpcNone;
+    iState = EIdle;
+    _LIT( KOn, "В сети" );
+    iObserver.SessionStatusL( KOn );
+    iObserver.SessionMessagesReadyL( iPeerId );
+    FlushPendingL();
+    }
+
+void CSymgramSession::HandleFileL( const TUint8* aP, TInt aLen )
+    {
+    if ( aLen < 4 )
         {
-        carry += (TUint64)exp[ i ] + ux[ i ];
-        exp[ i ] = (TUint32)carry;
-        carry >>= 32;
+        ClearSave();
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        FlushPendingL();
+        return;
         }
-    for ( i = 16; i < 80 && carry; i++ )
+    const TUint32 root = GetU32( aP );
+    if ( root == KUploadFileCdn )
         {
-        carry += exp[ i ];
-        exp[ i ] = (TUint32)carry;
-        carry >>= 32;
+        ClearSave();
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        iState = EIdle;
+        _LIT( KCdn, "Файл на CDN" );
+        iObserver.SessionStatusL( KCdn );
+        FlushPendingL();
+        return;
         }
-
-    BnModExpN( S, base, exp, 80, p );
-
-    TUint8 Sp[ 256 ];
-    S.ToBe( Sp, pLen );
-    TUint8 Khash[ 32 ];
-    Sha256( Sp, pLen, Khash );
-
-    TUint8 hp[ 32 ];
-    TUint8 hg[ 32 ];
-    Sha256( iSrpP.Ptr(), pLen, hp );
-    Sha256( gp, pLen, hg );
-    TUint8 xh[ 32 ];
-    for ( i = 0; i < 32; i++ )
+    if ( root != KUploadFile || aLen < 16 )
         {
-        xh[ i ] = (TUint8)( hp[ i ] ^ hg[ i ] );
+        ClearSave();
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        FlushPendingL();
+        return;
         }
-    TUint8 hs1[ 32 ];
-    TUint8 hs2[ 32 ];
-    Sha256( iSalt1.Ptr(), iSalt1.Length(), hs1 );
-    Sha256( iSalt2.Ptr(), iSalt2.Length(), hs2 );
-
-    TUint8 m1in[ 640 ];
-    n = 0;
-    Mem::Copy( m1in + n, xh, 32 );
-    n += 32;
-    Mem::Copy( m1in + n, hs1, 32 );
-    n += 32;
-    Mem::Copy( m1in + n, hs2, 32 );
-    n += 32;
-    Mem::Copy( m1in + n, Ap, pLen );
-    n += pLen;
-    Mem::Copy( m1in + n, Bp, pLen );
-    n += pLen;
-    Mem::Copy( m1in + n, Khash, 32 );
-    n += 32;
-    TUint8 m1[ 32 ];
-    Sha256( m1in, n, m1 );
-
-    aA.Zero();
-    TInt off = 0;
-    while ( off < pLen - 1 && Ap[ off ] == 0 )
+    TInt o = 12;
+    const TUint8* data = NULL;
+    TInt len = 0;
+    if ( TlReadBytes( aP + o, aLen - o, data, len ) < 0 )
         {
-        off++;
+        ClearSave();
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        FlushPendingL();
+        return;
         }
-    aA.Append( Ap + off, pLen - off );
-    aM1.Zero();
-    aM1.Append( m1, 32 );
-    return KErrNone;
+    if ( iSaveFull )
+        {
+        if ( len > 0 )
+            {
+            TPtrC8 chunk( data, len );
+            if ( iSaveFile.Write( chunk ) != KErrNone ||
+                 iSaveOff + len > KDownloadMax )
+                {
+                ClearSave();
+                iBusy = EFalse;
+                iRpc = ERpcNone;
+                iState = EIdle;
+                _LIT( KBig, "Файл слишком большой" );
+                iObserver.SessionStatusL( KBig );
+                FlushPendingL();
+                return;
+                }
+            iSaveOff += len;
+            }
+        if ( len >= KDownloadChunk )
+            {
+            SendGetFileNowL();
+            return;
+            }
+        iSaveFile.Close();
+        TFileName path;
+        path.Copy( iSavePath );
+        const TBool open = iSaveOpen;
+        iSaveFull = EFalse;
+        iSaveOpen = EFalse;
+        iSaveOff = 0;
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        iState = EIdle;
+        iObserver.SessionFileSavedL( path, open );
+        FlushPendingL();
+        return;
+        }
+    if ( len < 8 )
+        {
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        FlushPendingL();
+        return;
+        }
+    TPtrC8 jpeg( data, len );
+    iObserver.SessionThumbL( iFileMsgId, jpeg );
+    iBusy = EFalse;
+    iRpc = ERpcNone;
+    iState = EIdle;
+    _LIT( KOn, "В сети" );
+    iObserver.SessionStatusL( KOn );
+    FlushPendingL();
+    }
+
+void CSymgramSession::HandleSentL( const TUint8* aP, TInt aLen )
+    {
+    TInt id = 0;
+    TInt date = UnixNow() + iTimeOffset;
+    if ( aLen >= 24 && GetU32( aP ) == KUpdShortSent )
+        {
+        id = GetI32( aP + 8 );
+        date = GetI32( aP + 20 );
+        }
+    ClearUpload();
+    iBusy = EFalse;
+    iRpc = ERpcNone;
+    iState = EIdle;
+    _LIT( KOn, "В сети" );
+    iObserver.SessionStatusL( KOn );
+    iObserver.SessionSentL( id, date );
+    FlushPendingL();
     }
 
 void CSymgramSession::HandlePasswordL( const TUint8* aP, TInt aLen )
@@ -2127,6 +5386,13 @@ void CSymgramSession::HandlePasswordL( const TUint8* aP, TInt aLen )
     iResumeTries = 0;
     iBusy = EFalse;
     iState = EIdle;
+    if ( iPwdUtf.Length() > 0 && iSrpTries < 2 )
+        {
+        iSrpTries++;
+        SubmitPasswordL( iPwdUtf );
+        return;
+        }
+    iSrpTries = 0;
     iObserver.SessionPasswordNeededL( hint );
     }
 
@@ -2170,7 +5436,8 @@ void CSymgramSession::HandleEncryptedL( const TUint8* aPacket, TInt aLen )
     if ( Mem::Compare( sha + 8, 16, msgKey, 16 ) != 0 )
         {
         CleanupStack::PopAndDestroy( plain );
-        FailL( KErrCorrupt );
+        _LIT( KCrypt, "Шифр пакета" );
+        FailTextL( KCrypt );
         return;
         }
 
@@ -2280,12 +5547,12 @@ HBufC8* CSymgramSession::UnzipPackedLC( const TUint8* aObj, TInt aLen )
         FailL( KErrCorrupt );
         return NULL;
         }
-    HBufC8* raw = HBufC8::NewLC( 16384 );
+    HBufC8* raw = HBufC8::NewLC( 65536 );
     TPtr8 rp = raw->Des();
-    rp.SetLength( 16384 );
+    rp.SetLength( 65536 );
     TInt n = 0;
     if ( InflateTlGzip( packed, plen, const_cast<TUint8*>( rp.Ptr() ),
-                        16384, n ) != KErrNone || n < 4 )
+                        65536, n ) != KErrNone || n < 4 )
         {
         CleanupStack::PopAndDestroy( raw );
         _LIT( KGz, "Сжатый ответ" );
@@ -2341,6 +5608,12 @@ void CSymgramSession::HandleRpcResultL( const TUint8* aP, TInt aLen )
             return;
             }
         TPtrC8 text( msg, mlen );
+        const TInt migrate = MigrateDcFromError( text );
+        if ( migrate != 0 )
+            {
+            MigrateToDcL( migrate );
+            return;
+            }
         if ( text == KNeedPwdErr )
             {
             SendGetPasswordL();
@@ -2351,7 +5624,42 @@ void CSymgramSession::HandleRpcResultL( const TUint8* aP, TInt aLen )
             SendGetPasswordL();
             return;
             }
+        if ( text == KBadPwdErr )
+            {
+            iPwdUtf.Zero();
+            iSrpTries = 0;
+            iBusy = EFalse;
+            iState = EIdle;
+            iRpc = ERpcNone;
+            _LIT( KBad, "Неверный пароль" );
+            iObserver.SessionErrorL( KBad );
+            return;
+            }
         RpcFailL( text );
+        return;
+        }
+    if ( iRpc == ERpcSavePart )
+        {
+        if ( c == KBoolTrue )
+            {
+            iUploadPart++;
+            if ( iUploadPart < iUploadParts )
+                {
+                SendSavePartNowL();
+                }
+            else
+                {
+                SendMediaNowL();
+                }
+            return;
+            }
+        ClearUpload();
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        iState = EIdle;
+        _LIT( KFail, "Не удалось загрузить" );
+        iObserver.SessionStatusL( KFail );
+        FlushPendingL();
         return;
         }
     if ( c == KSentCode )
@@ -2385,6 +5693,10 @@ void CSymgramSession::HandleRpcResultL( const TUint8* aP, TInt aLen )
     if ( c == KAuthOk || c == KAuthOkOld )
         {
         iResumeTries = 0;
+        iAuthed = ETrue;
+        iPwdUtf.Zero();
+        iSrpTries = 0;
+        SaveSession();
         iObserver.SessionSignedInL();
         SendGetDialogsL();
         return;
@@ -2394,14 +5706,79 @@ void CSymgramSession::HandleRpcResultL( const TUint8* aP, TInt aLen )
         HandleDialogsL( p, n );
         return;
         }
+    if ( c == KContacts || c == KContactsOld )
+        {
+        HandleContactsL( p, n );
+        return;
+        }
+    if ( c == KContactsNotMod )
+        {
+        iBusy = EFalse;
+        iState = EIdle;
+        iRpc = ERpcNone;
+        _LIT( KOn, "В сети" );
+        iObserver.SessionStatusL( KOn );
+        iObserver.SessionContactsReadyL();
+        FlushPendingL();
+        return;
+        }
+    if ( c == KMessages || c == KMessagesSlice || c == KChannelMsgs )
+        {
+        HandleHistoryL( p, n );
+        return;
+        }
+    if ( c == KUploadFile || c == KUploadFileCdn )
+        {
+        HandleFileL( p, n );
+        return;
+        }
+    if ( c == KUpdShortSent || c == KUpdates || c == KUpdatesComb ||
+         c == KUpdateShort || c == KUpdShortMsg || c == KUpdShortChat ||
+         c == KUpdatesTooLong )
+        {
+        if ( iRpc == ERpcSend )
+            {
+            HandleSentL( p, n );
+            }
+        else
+            {
+            iBusy = EFalse;
+            iRpc = ERpcNone;
+            iState = EIdle;
+            _LIT( KOn, "В сети" );
+            iObserver.SessionStatusL( KOn );
+            FlushPendingL();
+            }
+        return;
+        }
     if ( c == KAccountPwd || c == KAccountPwdOld || c == KAccountPwdSrp )
         {
         HandlePasswordL( p, n );
         return;
         }
+    // sendMessage always returns some Updates object; treat an unknown
+    // constructor as success rather than dropping the TCP session.
+    if ( iRpc == ERpcSend )
+        {
+        HandleSentL( p, n );
+        return;
+        }
+    if ( iAuthed )
+        {
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        iState = EIdle;
+        TBuf<48> text;
+        _LIT( KUnk, "Ответ " );
+        text.Copy( KUnk );
+        text.AppendNum( (TInt64)c, EHex );
+        iObserver.SessionStatusL( text );
+        FlushPendingL();
+        return;
+        }
     TBuf<48> text;
-    _LIT( KUnk, "Ответ " );
-    text.Copy( KUnk );
+    _LIT( KUnkHs, "Ответ " );
+    text.Copy( KUnkHs );
     text.AppendNum( (TInt64)c, EHex );
     FailTextL( text );
     }

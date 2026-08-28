@@ -5,15 +5,11 @@
 #include <e32base.h>
 #include <badesca.h>
 #include "SymgramSession.h"
+#include "SymgramTypes.h"
 
-class TSymgramChat
-    {
-    public:
-        TBuf<40> iName;
-        TBuf<80> iPreview;
-        TBuf<12> iTime;
-        TInt     iUnread;
-    };
+class CSymgramStore;
+class CSymgramJpeg;
+class CFbsBitmap;
 
 class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
     {
@@ -27,8 +23,23 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         void NextL();
         void CycleCountry( TInt aDelta );
         void QueryCountryL();
+        void RefreshL();
+        void ShowContactsL();
+        void ShowSettingsL();
+        void ComposeL();
+        void PickEmojiL();
+        void PickPhotoL();
+        void OpenAttachmentL();
+        void SaveAttachmentL();
+        void LogoutAskL();
         TBool ShowNextCommand() const;
         TBool ShowCountryCommand() const;
+        TBool ShowRefreshCommand() const;
+        TBool ShowListCommand() const;
+        TBool ShowWriteCommand() const;
+        TBool ShowAttachCommand() const;
+        TBool ShowLogoutCommand() const;
+        void JpegReady( CFbsBitmap* aBmp, TInt aMsgId );
 
     public: // from CCoeControl
         TKeyResponse OfferKeyEventL( const TKeyEvent& aKeyEvent, TEventCode aType );
@@ -40,9 +51,18 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         void SessionCodeSentL();
         void SessionPasswordNeededL( const TDesC& aHint );
         void SessionSignedInL();
-        void SessionClearChatsL();
-        void SessionAddChatL( const TDesC& aName, const TDesC& aPreview,
-                              TInt aUnread );
+        void SessionLoggedOutL();
+        void SessionAddChatL( const TSymgramChat& aChat );
+        void SessionChatsReadyL();
+        void SessionClearContactsL();
+        void SessionAddContactL( const TSymgramContact& aContact );
+        void SessionContactsReadyL();
+        void SessionBeginMessagesL( TInt64 aPeer );
+        void SessionAddMessageL( const TSymgramMsg& aMsg );
+        void SessionMessagesReadyL( TInt64 aPeer );
+        void SessionThumbL( TInt aMsgId, const TDesC8& aJpeg );
+        void SessionFileSavedL( const TDesC& aPath, TBool aOpen );
+        void SessionSentL( TInt aId, TInt aDate );
 
     private: // from CCoeControl
         void Draw( const TRect& aRect ) const;
@@ -58,20 +78,56 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         void DrawCountryList( CWindowGc& aGc, const TRect& aRect ) const;
         void DrawSignInField( CWindowGc& aGc, const TRect& aRow, TBool aOn,
                               const TDesC& aLeft, const TDesC& aRight ) const;
+        void DrawChat( CWindowGc& aGc, const TRect& aRect ) const;
         void DrawEmptyState( CWindowGc& aGc, const TRect& aRect ) const;
         void DrawCenteredPair( CWindowGc& aGc, const TRect& aRect,
                                const HBufC* aTitle, const HBufC* aDetail ) const;
+        void DrawTabs( CWindowGc& aGc, const TRect& aRect ) const;
+        void DrawSettings( CWindowGc& aGc, const TRect& aRect ) const;
+        void DrawContactRow( CWindowGc& aGc, const TRect& aRect,
+                             TInt aIndex ) const;
+        void DrawBubble( CWindowGc& aGc, const TRect& aBox,
+                         const TSymgramMsg& aMsg, TBool aSelected ) const;
+        void DrawEmojiPicker( CWindowGc& aGc, const TRect& aRect ) const;
+        void DrawFilePicker( CWindowGc& aGc, const TRect& aRect ) const;
 
         TInt HeaderHeight() const;
         TInt RowHeight() const;
+        TInt TabHeight() const;
         TInt VisibleRows() const;
         TRect ListRect() const;
         void EnsureSelectionVisible();
         void CountryName( TDes& aOut ) const;
         TInt CallingCode() const;
         void QueryPasswordL();
+        void EditPasswordL();
         void HandleArrowL( TInt aDir );
         void HandleBackspace();
+        void OpenSelectedChat();
+        void OpenChatAt( TInt aIndex );
+        void OpenContact();
+        void ClosePane();
+        TBool ChatInTab( const TSymgramChat& aChat ) const;
+        TInt ChatCount() const;
+        TInt ChatIndex( TInt aRow ) const;
+        void CloseChat();
+        void ClosePicker();
+        void ScanFolder( const TDesC& aDir );
+        void SendDraftL( const TDesC& aText );
+        void SendPickedEmojiL();
+        void SendPickedPhotoL();
+        void EnsureMsgVisible();
+        TInt SelectedAttach() const;
+        void StartAttachL( TBool aOpen );
+        void AttachmentName( const TSymgramMsg& aMsg, TDes& aOut ) const;
+        TBool MakeAttachPath( const TSymgramMsg& aMsg, TDes& aOut ) const;
+        void OpenSystemL( const TDesC& aPath );
+        TInt FindChat( TInt64 aId ) const;
+        void ClearMessages();
+        void RequestNextThumb();
+        void FormatHm( TInt aUnix, TDes& aOut ) const;
+        void PhoneText( TDes& aOut ) const;
+        TInt CurrentCount() const;
 
     private:
         const CFont* iTitleFont;
@@ -89,6 +145,7 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         HBufC* iPasswordHint;
         HBufC* iFieldCountry;
         HBufC* iFieldPhone;
+        HBufC* iChatHint;
 
         CDesCArray* iCountries;
 
@@ -104,11 +161,25 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         TBuf<80> iPwdHint;
 
         CSymgramSession* iSession;
+        CSymgramStore* iStore;
+        CSymgramJpeg* iJpeg;
         TInt iNavDown;
 
         RArray<TSymgramChat> iChats;
+        RArray<TSymgramContact> iContacts;
+        RArray<TSymgramMsg> iMsgs;
+        TInt iTab;
+        TInt iPane;
         TInt iSelected;
         TInt iTopRow;
+        TBool iInChat;
+        TInt64 iOpenId;
+        TInt iThumbAt;
+        TInt iSetSel;
+        TInt iPick;
+        TInt iPickSel;
+        TInt iMsgSel;
+        CDesCArray* iFiles;
     };
 
 #endif

@@ -15,6 +15,18 @@ rls_string STRING_r_symgram_menu_next "Next"
 //d:Options menu, cycles the calling-code country.
 rls_string STRING_r_symgram_menu_country "Country"
 
+rls_string STRING_r_symgram_menu_write "Write"
+rls_string STRING_r_symgram_menu_emoji "Emoji"
+rls_string STRING_r_symgram_menu_photo "Photo"
+rls_string STRING_r_symgram_menu_open "Open"
+rls_string STRING_r_symgram_menu_save "Save"
+rls_string STRING_r_symgram_menu_refresh "Refresh"
+rls_string STRING_r_symgram_menu_contacts "Contacts"
+rls_string STRING_r_symgram_menu_settings "Settings"
+rls_string STRING_r_symgram_menu_logout "Log out"
+
+rls_string STRING_r_symgram_send_prompt "Message"
+
 //d:Options menu, closes the application.
 rls_string STRING_r_symgram_menu_exit "Exit"
 
@@ -49,7 +61,7 @@ rls_string STRING_r_symgram_code_hint "Enter the code from the app or SMS"
 rls_string STRING_r_symgram_password_prompt "Cloud password"
 
 //d:Hint under the cloud-password field: characters are shown, not masked.
-rls_string STRING_r_symgram_password_hint "Characters are visible as you type"
+rls_string STRING_r_symgram_password_hint "Letters, digits, symbols. # switches case"
 
 rls_string STRING_r_symgram_cc_ru "Russia"
 rls_string STRING_r_symgram_cc_by "Belarus"
@@ -64,6 +76,9 @@ rls_string STRING_r_symgram_cc_fi "Finland"
 rls_string STRING_r_symgram_empty_title "No chats"
 
 //d:Explanation under the empty list title.
-rls_string STRING_r_symgram_empty_detail "Chats will appear here"
+rls_string STRING_r_symgram_empty_detail "Chats are stored on the phone"
+
+//d:Placeholder inside a chat until message history is fetched.
+rls_string STRING_r_symgram_chat_hint "Center to write. C goes back."
 
 rls_string STRING_r_symgram_loc_resource_file "\\resource\\apps\\Symgram"

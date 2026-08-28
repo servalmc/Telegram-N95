@@ -50,6 +50,51 @@ RESOURCE MENU_PANE r_symgram_menu
             },
         MENU_ITEM
             {
+            command = ESymgramCmdWrite;
+            txt = STRING_r_symgram_menu_write;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdEmoji;
+            txt = STRING_r_symgram_menu_emoji;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdPhoto;
+            txt = STRING_r_symgram_menu_photo;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdOpen;
+            txt = STRING_r_symgram_menu_open;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdSave;
+            txt = STRING_r_symgram_menu_save;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdRefresh;
+            txt = STRING_r_symgram_menu_refresh;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdContacts;
+            txt = STRING_r_symgram_menu_contacts;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdSettings;
+            txt = STRING_r_symgram_menu_settings;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdLogout;
+            txt = STRING_r_symgram_menu_logout;
+            },
+        MENU_ITEM
+            {
             command = ESymgramCmdAbout;
             txt = STRING_r_symgram_menu_about;
             },
@@ -138,6 +183,42 @@ RESOURCE DIALOG r_symgram_password_query
                     lines = 1;
                     avkon_flags = EAknEditorFlagNoT9;
                     default_input_mode = EAknEditorTextInputMode;
+                    allowed_input_modes = EAknEditorAllInputModes;
+                    allowed_case_modes = EAknEditorAllCaseModes;
+                    default_case = EAknEditorTextCase;
+                    numeric_keymap = EAknEditorAlphanumericNumberModeKeymap;
+                    };
+                };
+            }
+        };
+    }
+
+RESOURCE DIALOG r_symgram_send_query
+    {
+    flags = EGeneralQueryFlags;
+    buttons = R_AVKON_SOFTKEYS_OK_CANCEL;
+    items =
+        {
+        DLG_LINE
+            {
+            type = EAknCtQuery;
+            id = EGeneralQuery;
+            control = AVKON_DATA_QUERY
+                {
+                layout = EDataLayout;
+                label = STRING_r_symgram_send_prompt;
+                control = EDWIN
+                    {
+                    flags = EEikEdwinNoHorizScrolling;
+                    width = 25;
+                    maxlength = 140;
+                    lines = 2;
+                    avkon_flags = EAknEditorFlagNoT9;
+                    default_input_mode = EAknEditorTextInputMode;
+                    allowed_input_modes = EAknEditorAllInputModes;
+                    allowed_case_modes = EAknEditorAllCaseModes;
+                    default_case = EAknEditorTextCase;
+                    numeric_keymap = EAknEditorAlphanumericNumberModeKeymap;
                     };
                 };
             }
@@ -195,6 +276,11 @@ RESOURCE TBUF r_symgram_empty_detail
 RESOURCE TBUF r_symgram_password_hint
     {
     buf = STRING_r_symgram_password_hint;
+    }
+
+RESOURCE TBUF r_symgram_chat_hint
+    {
+    buf = STRING_r_symgram_chat_hint;
     }
 
 RESOURCE LOCALISABLE_APP_INFO r_symgram_localisable_app_info

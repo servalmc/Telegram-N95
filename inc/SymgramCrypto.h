@@ -40,6 +40,12 @@ void BnSubMod( TBn& aOut, const TBn& aA, const TBn& aB, const TBn& aMod );
 void BnModExp( TBn& aOut, const TBn& aBase, const TBn& aExp, const TBn& aMod );
 void BnModExpN( TBn& aOut, const TBn& aBase,
                 const TUint32* aExp, TInt aExpLimbs, const TBn& aMod );
+void BnExpMsb( const TUint32* aExp, TInt aLimbs, TInt& aLimb, TInt& aBit );
+void BnExpBegin( TBn& aAcc, TBn& aBaseM, TUint32& aN0inv,
+                 const TBn& aBase, const TBn& aMod );
+TBool BnExpStep( TBn& aAcc, const TBn& aBaseM, const TBn& aMod, TUint32 aN0inv,
+                 const TUint32* aExp, TInt& aLimb, TInt& aBit, TInt aBudget );
+void BnExpFinish( TBn& aOut, const TBn& aAcc, const TBn& aMod, TUint32 aN0inv );
 void BnRsaPublic( TUint8 aOut[ 256 ], const TUint8 aIn[ 256 ],
                   const TUint8 aMod[ 256 ] );
 

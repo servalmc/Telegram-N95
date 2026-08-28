@@ -5,7 +5,16 @@ enum TSymgramCommandIds
     {
     ESymgramCmdAbout = 1,
     ESymgramCmdNext,
-    ESymgramCmdCountry
+    ESymgramCmdCountry,
+    ESymgramCmdRefresh,
+    ESymgramCmdContacts,
+    ESymgramCmdSettings,
+    ESymgramCmdWrite,
+    ESymgramCmdEmoji,
+    ESymgramCmdPhoto,
+    ESymgramCmdOpen,
+    ESymgramCmdSave,
+    ESymgramCmdLogout
     };
 
 #endif // __SYMGRAM_HRH__

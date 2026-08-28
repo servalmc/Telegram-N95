@@ -5,6 +5,8 @@
 #include <w32std.h>
 #include <eikmenub.h>
 #include <eikmenup.h>
+#include <eikenv.h>
+#include <eikaufty.h>
 #include <Symgram.rsg>
 
 #include "Symgram.hrh"
@@ -59,6 +61,69 @@ void CSymgramAppUi::HandleCommandL( TInt aCommand )
                 }
             break;
 
+        case ESymgramCmdRefresh:
+            if ( iAppView )
+                {
+                iAppView->RefreshL();
+                }
+            break;
+
+        case ESymgramCmdContacts:
+            if ( iAppView )
+                {
+                iAppView->ShowContactsL();
+                }
+            break;
+
+        case ESymgramCmdSettings:
+            if ( iAppView )
+                {
+                iAppView->ShowSettingsL();
+                }
+            break;
+
+        case ESymgramCmdWrite:
+            if ( iAppView )
+                {
+                iAppView->ComposeL();
+                }
+            break;
+
+        case ESymgramCmdEmoji:
+            if ( iAppView )
+                {
+                iAppView->PickEmojiL();
+                }
+            break;
+
+        case ESymgramCmdPhoto:
+            if ( iAppView )
+                {
+                iAppView->PickPhotoL();
+                }
+            break;
+
+        case ESymgramCmdOpen:
+            if ( iAppView )
+                {
+                iAppView->OpenAttachmentL();
+                }
+            break;
+
+        case ESymgramCmdSave:
+            if ( iAppView )
+                {
+                iAppView->SaveAttachmentL();
+                }
+            break;
+
+        case ESymgramCmdLogout:
+            if ( iAppView )
+                {
+                iAppView->LogoutAskL();
+                }
+            break;
+
         case ESymgramCmdAbout:
             ShowAboutL();
             break;
@@ -77,6 +142,15 @@ void CSymgramAppUi::DynInitMenuPaneL( TInt aResourceId, CEikMenuPane* aMenuPane 
         }
     aMenuPane->SetItemDimmed( ESymgramCmdNext, !iAppView->ShowNextCommand() );
     aMenuPane->SetItemDimmed( ESymgramCmdCountry, !iAppView->ShowCountryCommand() );
+    aMenuPane->SetItemDimmed( ESymgramCmdRefresh, !iAppView->ShowRefreshCommand() );
+    aMenuPane->SetItemDimmed( ESymgramCmdContacts, !iAppView->ShowListCommand() );
+    aMenuPane->SetItemDimmed( ESymgramCmdSettings, !iAppView->ShowListCommand() );
+    aMenuPane->SetItemDimmed( ESymgramCmdWrite, !iAppView->ShowWriteCommand() );
+    aMenuPane->SetItemDimmed( ESymgramCmdEmoji, !iAppView->ShowWriteCommand() );
+    aMenuPane->SetItemDimmed( ESymgramCmdPhoto, !iAppView->ShowWriteCommand() );
+    aMenuPane->SetItemDimmed( ESymgramCmdOpen, !iAppView->ShowAttachCommand() );
+    aMenuPane->SetItemDimmed( ESymgramCmdSave, !iAppView->ShowAttachCommand() );
+    aMenuPane->SetItemDimmed( ESymgramCmdLogout, !iAppView->ShowLogoutCommand() );
     }
 
 void CSymgramAppUi::HandleStatusPaneSizeChange()
@@ -128,7 +202,11 @@ void CSymgramAppUi::HandleWsEventL( const TWsEvent& aEvent,
         CAknAppUi::HandleWsEventL( aEvent, aDestination );
         return;
         }
-    CEikMenuBar* bar = MenuBar();
+    CEikMenuBar* bar = NULL;
+    if ( iEikonEnv && iEikonEnv->AppUiFactory() )
+        {
+        bar = iEikonEnv->AppUiFactory()->MenuBar();
+        }
     if ( IsDisplayingMenuOrDialog() || ( bar && bar->IsDisplayed() ) )
         {
         CAknAppUi::HandleWsEventL( aEvent, aDestination );
