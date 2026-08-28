@@ -13,10 +13,73 @@ rls_string STRING_r_symgram_menu_about "О программе"
 //d:Options menu, closes the application.
 rls_string STRING_r_symgram_menu_exit "Выход"
 
+//d:Options menu, sends the phone number onward.
+rls_string STRING_r_symgram_menu_next "Далее"
+
+//d:Options menu, cycles the calling-code country.
+rls_string STRING_r_symgram_menu_country "Страна"
+
+rls_string STRING_r_symgram_menu_write "Написать"
+rls_string STRING_r_symgram_menu_emoji "Эмодзи"
+rls_string STRING_r_symgram_menu_photo "Фото"
+rls_string STRING_r_symgram_menu_open "Открыть"
+rls_string STRING_r_symgram_menu_save "Сохранить"
+rls_string STRING_r_symgram_menu_refresh "Обновить"
+rls_string STRING_r_symgram_menu_contacts "Контакты"
+rls_string STRING_r_symgram_menu_settings "Настройки"
+rls_string STRING_r_symgram_menu_logout "Выйти"
+
+rls_string STRING_r_symgram_send_prompt "Сообщение"
+
 //d:Body of the about note, shown under the name and version.
 rls_string STRING_r_symgram_about_text "Клиент Telegram для Symbian 9.2"
 
-//d:Connection status shown when there is no session.
+//d:Connection status shown in the header when there is no session.
 rls_string STRING_r_symgram_status_offline "Нет соединения"
+
+//d:Header status while the user is not signed in.
+rls_string STRING_r_symgram_status_unsigned "Нет входа"
+
+//d:Title of the phone-number screen.
+rls_string STRING_r_symgram_signin_title "Ваш номер телефона"
+
+//d:Hint under the phone field.
+rls_string STRING_r_symgram_signin_hint "Центр на стране — список, вверх/вниз — поле"
+
+rls_string STRING_r_symgram_field_country "Страна"
+rls_string STRING_r_symgram_field_phone "Номер"
+
+//d:Status after Telegram answered the first handshake packet.
+rls_string STRING_r_symgram_pq_ok "Telegram ответил"
+
+//d:Title of the SMS-code screen.
+rls_string STRING_r_symgram_code_title "Код из Telegram"
+
+//d:Hint under the code field.
+rls_string STRING_r_symgram_code_hint "Введите код из приложения или SMS"
+
+//d:Prompt for Telegram cloud password (2FA).
+rls_string STRING_r_symgram_password_prompt "Облачный пароль"
+
+//d:Hint under the cloud-password field: characters are shown, not masked.
+rls_string STRING_r_symgram_password_hint "Буквы, цифры, символы. # — регистр"
+
+rls_string STRING_r_symgram_cc_ru "Россия"
+rls_string STRING_r_symgram_cc_by "Беларусь"
+rls_string STRING_r_symgram_cc_kz "Казахстан"
+rls_string STRING_r_symgram_cc_ua "Украина"
+rls_string STRING_r_symgram_cc_de "Германия"
+rls_string STRING_r_symgram_cc_us "США"
+rls_string STRING_r_symgram_cc_gb "Великобритания"
+rls_string STRING_r_symgram_cc_fi "Финляндия"
+
+//d:Shown in place of the chat list after sign-in, while it is empty.
+rls_string STRING_r_symgram_empty_title "Чатов нет"
+
+//d:Explanation under the empty list title.
+rls_string STRING_r_symgram_empty_detail "Чаты сохраняются на телефоне"
+
+//d:Placeholder inside a chat until message history is fetched.
+rls_string STRING_r_symgram_chat_hint "Центр — написать. C — назад."
 
 rls_string STRING_r_symgram_loc_resource_file "\\resource\\apps\\Symgram"

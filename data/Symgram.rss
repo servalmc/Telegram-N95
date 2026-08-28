@@ -3,9 +3,11 @@ NAME SYMG
 CHARACTER_SET UTF8
 
 #include <eikon.rh>
+#include <eikon.hrh>
 #include <avkon.rh>
 #include <avkon.rsg>
 #include <appinfo.rh>
+#include <badef.rh>
 #include "Symgram.hrh"
 #include "Symgram.rls"
 
@@ -38,6 +40,61 @@ RESOURCE MENU_PANE r_symgram_menu
         {
         MENU_ITEM
             {
+            command = ESymgramCmdNext;
+            txt = STRING_r_symgram_menu_next;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdCountry;
+            txt = STRING_r_symgram_menu_country;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdWrite;
+            txt = STRING_r_symgram_menu_write;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdEmoji;
+            txt = STRING_r_symgram_menu_emoji;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdPhoto;
+            txt = STRING_r_symgram_menu_photo;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdOpen;
+            txt = STRING_r_symgram_menu_open;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdSave;
+            txt = STRING_r_symgram_menu_save;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdRefresh;
+            txt = STRING_r_symgram_menu_refresh;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdContacts;
+            txt = STRING_r_symgram_menu_contacts;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdSettings;
+            txt = STRING_r_symgram_menu_settings;
+            },
+        MENU_ITEM
+            {
+            command = ESymgramCmdLogout;
+            txt = STRING_r_symgram_menu_logout;
+            },
+        MENU_ITEM
+            {
             command = ESymgramCmdAbout;
             txt = STRING_r_symgram_menu_about;
             },
@@ -59,6 +116,173 @@ RESOURCE TBUF r_symgram_status_offline
     buf = STRING_r_symgram_status_offline;
     }
 
+RESOURCE TBUF r_symgram_status_unsigned
+    {
+    buf = STRING_r_symgram_status_unsigned;
+    }
+
+RESOURCE TBUF r_symgram_signin_title
+    {
+    buf = STRING_r_symgram_signin_title;
+    }
+
+RESOURCE TBUF r_symgram_signin_hint
+    {
+    buf = STRING_r_symgram_signin_hint;
+    }
+
+RESOURCE TBUF r_symgram_pq_ok
+    {
+    buf = STRING_r_symgram_pq_ok;
+    }
+
+RESOURCE TBUF r_symgram_code_title
+    {
+    buf = STRING_r_symgram_code_title;
+    }
+
+RESOURCE TBUF r_symgram_code_hint
+    {
+    buf = STRING_r_symgram_code_hint;
+    }
+
+RESOURCE TBUF r_symgram_password_prompt
+    {
+    buf = STRING_r_symgram_password_prompt;
+    }
+
+RESOURCE TBUF r_symgram_field_country
+    {
+    buf = STRING_r_symgram_field_country;
+    }
+
+RESOURCE TBUF r_symgram_field_phone
+    {
+    buf = STRING_r_symgram_field_phone;
+    }
+
+RESOURCE DIALOG r_symgram_password_query
+    {
+    flags = EGeneralQueryFlags;
+    buttons = R_AVKON_SOFTKEYS_OK_CANCEL;
+    items =
+        {
+        DLG_LINE
+            {
+            type = EAknCtQuery;
+            id = EGeneralQuery;
+            control = AVKON_DATA_QUERY
+                {
+                layout = EDataLayout;
+                label = STRING_r_symgram_password_prompt;
+                control = EDWIN
+                    {
+                    flags = EEikEdwinNoHorizScrolling;
+                    width = 25;
+                    maxlength = 128;
+                    lines = 1;
+                    avkon_flags = EAknEditorFlagNoT9;
+                    default_input_mode = EAknEditorTextInputMode;
+                    allowed_input_modes = EAknEditorAllInputModes;
+                    allowed_case_modes = EAknEditorAllCaseModes;
+                    default_case = EAknEditorTextCase;
+                    numeric_keymap = EAknEditorAlphanumericNumberModeKeymap;
+                    };
+                };
+            }
+        };
+    }
+
+RESOURCE DIALOG r_symgram_send_query
+    {
+    flags = EGeneralQueryFlags;
+    buttons = R_AVKON_SOFTKEYS_OK_CANCEL;
+    items =
+        {
+        DLG_LINE
+            {
+            type = EAknCtQuery;
+            id = EGeneralQuery;
+            control = AVKON_DATA_QUERY
+                {
+                layout = EDataLayout;
+                label = STRING_r_symgram_send_prompt;
+                control = EDWIN
+                    {
+                    flags = EEikEdwinNoHorizScrolling;
+                    width = 25;
+                    maxlength = 140;
+                    lines = 2;
+                    avkon_flags = EAknEditorFlagNoT9;
+                    default_input_mode = EAknEditorTextInputMode;
+                    allowed_input_modes = EAknEditorAllInputModes;
+                    allowed_case_modes = EAknEditorAllCaseModes;
+                    default_case = EAknEditorTextCase;
+                    numeric_keymap = EAknEditorAlphanumericNumberModeKeymap;
+                    };
+                };
+            }
+        };
+    }
+
+RESOURCE ARRAY r_symgram_countries
+    {
+    items =
+        {
+        LBUF { txt = STRING_r_symgram_cc_ru; },
+        LBUF { txt = STRING_r_symgram_cc_by; },
+        LBUF { txt = STRING_r_symgram_cc_kz; },
+        LBUF { txt = STRING_r_symgram_cc_ua; },
+        LBUF { txt = STRING_r_symgram_cc_de; },
+        LBUF { txt = STRING_r_symgram_cc_us; },
+        LBUF { txt = STRING_r_symgram_cc_gb; },
+        LBUF { txt = STRING_r_symgram_cc_fi; }
+        };
+    }
+
+RESOURCE AVKON_LIST_QUERY r_symgram_country_query
+    {
+    flags = EGeneralQueryFlags;
+    softkeys = R_AVKON_SOFTKEYS_OK_CANCEL__OK;
+    items =
+        {
+        AVKON_LIST_QUERY_DLG_LINE
+            {
+            control = AVKON_LIST_QUERY_CONTROL
+                {
+                listtype = EAknCtSinglePopupMenuListBox;
+                listbox = AVKON_LIST_QUERY_LIST
+                    {
+                    flags = EAknListBoxSelectionList | EAknListBoxLoopScrolling;
+                    height = 8;
+                    array_id = r_symgram_countries;
+                    };
+                heading = STRING_r_symgram_field_country;
+                };
+            }
+        };
+    }
+
+RESOURCE TBUF r_symgram_empty_title
+    {
+    buf = STRING_r_symgram_empty_title;
+    }
+
+RESOURCE TBUF r_symgram_empty_detail
+    {
+    buf = STRING_r_symgram_empty_detail;
+    }
+
+RESOURCE TBUF r_symgram_password_hint
+    {
+    buf = STRING_r_symgram_password_hint;
+    }
+
+RESOURCE TBUF r_symgram_chat_hint
+    {
+    buf = STRING_r_symgram_chat_hint;
+    }
+
 RESOURCE LOCALISABLE_APP_INFO r_symgram_localisable_app_info
     {
     short_caption = STRING_r_symgram_short_caption;
@@ -66,5 +290,7 @@ RESOURCE LOCALISABLE_APP_INFO r_symgram_localisable_app_info
         CAPTION_AND_ICON_INFO
             {
             caption = STRING_r_symgram_caption;
+            number_of_icons = 1;
+            icon_file = "\\resource\\apps\\Symgram_aif.mbm";
             };
     }

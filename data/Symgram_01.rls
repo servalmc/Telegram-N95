@@ -9,13 +9,76 @@ rls_string STRING_r_symgram_short_caption "Symgram"
 //d:Options menu, opens the about note.
 rls_string STRING_r_symgram_menu_about "About"
 
+//d:Options menu, sends the phone number onward.
+rls_string STRING_r_symgram_menu_next "Next"
+
+//d:Options menu, cycles the calling-code country.
+rls_string STRING_r_symgram_menu_country "Country"
+
+rls_string STRING_r_symgram_menu_write "Write"
+rls_string STRING_r_symgram_menu_emoji "Emoji"
+rls_string STRING_r_symgram_menu_photo "Photo"
+rls_string STRING_r_symgram_menu_open "Open"
+rls_string STRING_r_symgram_menu_save "Save"
+rls_string STRING_r_symgram_menu_refresh "Refresh"
+rls_string STRING_r_symgram_menu_contacts "Contacts"
+rls_string STRING_r_symgram_menu_settings "Settings"
+rls_string STRING_r_symgram_menu_logout "Log out"
+
+rls_string STRING_r_symgram_send_prompt "Message"
+
 //d:Options menu, closes the application.
 rls_string STRING_r_symgram_menu_exit "Exit"
 
 //d:Body of the about note, shown under the name and version.
 rls_string STRING_r_symgram_about_text "Telegram client for Symbian 9.2"
 
-//d:Connection status shown when there is no session.
+//d:Connection status shown in the header when there is no session.
 rls_string STRING_r_symgram_status_offline "Not connected"
+
+//d:Header status while the user is not signed in.
+rls_string STRING_r_symgram_status_unsigned "Not signed in"
+
+//d:Title of the phone-number screen.
+rls_string STRING_r_symgram_signin_title "Your phone number"
+
+//d:Hint under the phone field.
+rls_string STRING_r_symgram_signin_hint "Center on country: list, up/down: field"
+
+rls_string STRING_r_symgram_field_country "Country"
+rls_string STRING_r_symgram_field_phone "Number"
+
+//d:Status after Telegram answered the first handshake packet.
+rls_string STRING_r_symgram_pq_ok "Telegram answered"
+
+//d:Title of the SMS-code screen.
+rls_string STRING_r_symgram_code_title "Telegram code"
+
+//d:Hint under the code field.
+rls_string STRING_r_symgram_code_hint "Enter the code from the app or SMS"
+
+//d:Prompt for Telegram cloud password (2FA).
+rls_string STRING_r_symgram_password_prompt "Cloud password"
+
+//d:Hint under the cloud-password field: characters are shown, not masked.
+rls_string STRING_r_symgram_password_hint "Letters, digits, symbols. # switches case"
+
+rls_string STRING_r_symgram_cc_ru "Russia"
+rls_string STRING_r_symgram_cc_by "Belarus"
+rls_string STRING_r_symgram_cc_kz "Kazakhstan"
+rls_string STRING_r_symgram_cc_ua "Ukraine"
+rls_string STRING_r_symgram_cc_de "Germany"
+rls_string STRING_r_symgram_cc_us "United States"
+rls_string STRING_r_symgram_cc_gb "United Kingdom"
+rls_string STRING_r_symgram_cc_fi "Finland"
+
+//d:Shown in place of the chat list after sign-in, while it is empty.
+rls_string STRING_r_symgram_empty_title "No chats"
+
+//d:Explanation under the empty list title.
+rls_string STRING_r_symgram_empty_detail "Chats are stored on the phone"
+
+//d:Placeholder inside a chat until message history is fetched.
+rls_string STRING_r_symgram_chat_hint "Center to write. C goes back."
 
 rls_string STRING_r_symgram_loc_resource_file "\\resource\\apps\\Symgram"
