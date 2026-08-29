@@ -124,6 +124,13 @@ void CSymgramAppUi::HandleCommandL( TInt aCommand )
                 }
             break;
 
+        case ESymgramCmdUpdate:
+            if ( iAppView )
+                {
+                iAppView->CheckUpdateL();
+                }
+            break;
+
         case ESymgramCmdAbout:
             ShowAboutL();
             break;
@@ -151,6 +158,7 @@ void CSymgramAppUi::DynInitMenuPaneL( TInt aResourceId, CEikMenuPane* aMenuPane 
     aMenuPane->SetItemDimmed( ESymgramCmdOpen, !iAppView->ShowAttachCommand() );
     aMenuPane->SetItemDimmed( ESymgramCmdSave, !iAppView->ShowAttachCommand() );
     aMenuPane->SetItemDimmed( ESymgramCmdLogout, !iAppView->ShowLogoutCommand() );
+    aMenuPane->SetItemDimmed( ESymgramCmdUpdate, !iAppView->ShowListCommand() );
     }
 
 void CSymgramAppUi::HandleStatusPaneSizeChange()

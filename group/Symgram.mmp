@@ -27,6 +27,7 @@ SOURCE            SymgramSession.cpp
 SOURCE            SymgramCrypto.cpp
 SOURCE            SymgramInflate.cpp
 SOURCE            SymgramStore.cpp
+SOURCE            SymgramUpdate.cpp
 
 USERINCLUDE       ..\inc
 SYSTEMINCLUDE     \epoc32\include
@@ -65,6 +66,7 @@ LIBRARY           estor.lib
 // alone got by on virtual calls through the graphics context.
 LIBRARY           gdi.lib
 LIBRARY           fbscli.lib
+LIBRARY           ws32.lib
 LIBRARY           bafl.lib
 LIBRARY           esock.lib
 LIBRARY           insock.lib

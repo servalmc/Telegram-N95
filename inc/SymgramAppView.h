@@ -6,12 +6,15 @@
 #include <badesca.h>
 #include "SymgramSession.h"
 #include "SymgramTypes.h"
+#include "SymgramUpdate.h"
 
 class CSymgramStore;
 class CSymgramJpeg;
 class CFbsBitmap;
+class CSymgramUpdate;
 
-class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
+class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver,
+                        public MSymgramUpdateObserver
     {
     public:
         static CSymgramAppView* NewL( const TRect& aRect );
@@ -32,6 +35,7 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         void OpenAttachmentL();
         void SaveAttachmentL();
         void LogoutAskL();
+        void CheckUpdateL();
         TBool ShowNextCommand() const;
         TBool ShowCountryCommand() const;
         TBool ShowRefreshCommand() const;
@@ -63,6 +67,10 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         void SessionThumbL( TInt aMsgId, const TDesC8& aJpeg );
         void SessionFileSavedL( const TDesC& aPath, TBool aOpen );
         void SessionSentL( TInt aId, TInt aDate );
+
+    private: // from MSymgramUpdateObserver
+        void UpdateStatusL( const TDesC& aText );
+        void UpdateReadyL();
 
     private: // from CCoeControl
         void Draw( const TRect& aRect ) const;
@@ -128,11 +136,16 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         void FormatHm( TInt aUnix, TDes& aOut ) const;
         void PhoneText( TDes& aOut ) const;
         TInt CurrentCount() const;
+        const CFont* ChatFont() const;
+        void LoadEmojiL();
 
     private:
         const CFont* iTitleFont;
         const CFont* iNameFont;
         const CFont* iTextFont;
+        CFont* iChatFont;
+        CFbsBitmap* iEmojiBmp[ 24 ];
+        CFbsBitmap* iEmojiMask[ 24 ];
 
         HBufC* iStatus;
         HBufC* iSignInTitle;
@@ -163,6 +176,7 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver
         CSymgramSession* iSession;
         CSymgramStore* iStore;
         CSymgramJpeg* iJpeg;
+        CSymgramUpdate* iUpdate;
         TInt iNavDown;
 
         RArray<TSymgramChat> iChats;

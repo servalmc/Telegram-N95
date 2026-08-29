@@ -3,9 +3,11 @@
 #include <e32std.h>
 #include <hal.h>
 #include <hal_data.h>
+#include <PathInfo.h>
 
 #include "SymgramSession.h"
 #include "SymgramApi.h"
+#include "SymgramVersion.h"
 
 #ifdef __GCCE__
 #define SYMGRAM_NOINLINE __attribute__((noinline))
@@ -107,6 +109,8 @@ namespace
     const TInt KPbkdfChunk = 48;
     const TInt KSrpBitBudget = 12;
     const TInt KMaxIn = 65536;
+    const TInt KMaxUnzip = 131072;
+    const TInt KHistLimit = 8;
 
     struct TDhWork
         {
@@ -345,7 +349,33 @@ namespace
 
     TInt Need( TInt aO, TInt aN, TInt aAdd )
         {
-        return ( aO + aAdd <= aN ) ? KErrNone : KErrCorrupt;
+        if ( aAdd < 0 || aO < 0 || aN < 0 || aO > aN )
+            {
+            return KErrCorrupt;
+            }
+        if ( aAdd > aN - aO )
+            {
+            return KErrCorrupt;
+            }
+        return KErrNone;
+        }
+
+    TInt ReadVecCount( const TUint8* aP, TInt aN, TInt& aO, TInt aMax,
+                       TInt& aCount )
+        {
+        if ( Need( aO, aN, 8 ) != KErrNone ||
+             GetU32( aP + aO ) != 0x1cb5c415u )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 n = GetU32( aP + aO + 4 );
+        aO += 8;
+        if ( aMax < 0 || n > (TUint32)aMax )
+            {
+            return KErrCorrupt;
+            }
+        aCount = (TInt)n;
+        return KErrNone;
         }
 
     TInt SkipBytes( const TUint8* aP, TInt aN, TInt& aO )
@@ -419,6 +449,7 @@ namespace
             {
             return KErrCorrupt;
             }
+        const TUint32 c = GetU32( aP + aO );
         aO += 4;
         const TUint32 flags = GetU32( aP + aO );
         aO += 4;
@@ -437,6 +468,14 @@ namespace
                 return KErrCorrupt;
                 }
             aO += 4;
+            }
+        if ( c == 0xaf509d20u )
+            {
+            if ( ( flags & 8 ) != 0 && SkipBytes( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            return KErrNone;
             }
         TInt b = 3;
         for ( b = 3; b <= 5; b++ )
@@ -462,6 +501,477 @@ namespace
                 {
                 return KErrCorrupt;
                 }
+            }
+        return KErrNone;
+        }
+
+    TInt SkipEntity( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0x208e68c9u )
+            {
+            if ( Need( aO, aN, 12 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 12;
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            const TUint32 u = GetU32( aP + aO );
+            aO += 4;
+            if ( u == 0xd8292816u || u == 0xf21158aeu )
+                {
+                if ( Need( aO, aN, 16 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 16;
+                }
+            return KErrNone;
+            }
+        if ( Need( aO, aN, 8 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 8;
+        if ( c == 0x73924be0u || c == 0x76a6d327u )
+            {
+            return SkipBytes( aP, aN, aO );
+            }
+        if ( c == 0xdc7b1140u || c == 0xc8cf05f8u )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 8;
+            }
+        return KErrNone;
+        }
+
+    TInt SkipEntityVec( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        TInt n = 0;
+        if ( ReadVecCount( aP, aN, aO, 256, n ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        TInt i = 0;
+        for ( i = 0; i < n; i++ )
+            {
+            if ( SkipEntity( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            }
+        return KErrNone;
+        }
+
+    TInt SkipPeer( const TUint8* aP, TInt aN, TInt& aO, TInt& aKind, TInt64& aId );
+
+    TInt SkipInputReplyTo( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0x9c5386e4u )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            const TUint32 flags = GetU32( aP + aO );
+            aO += 8;
+            if ( ( flags & 1 ) != 0 )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 4;
+                }
+            return KErrNone;
+            }
+        if ( c == 0xb3abbeddu || c == 0x8c5d137eu || c == 0x869fbe10u )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            const TUint32 flags = GetU32( aP + aO );
+            aO += 8;
+            if ( ( flags & 1 ) != 0 )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 4;
+                }
+            if ( ( flags & 2 ) != 0 )
+                {
+                TInt kind = 0;
+                TInt64 id = 0;
+                if ( SkipPeer( aP, aN, aO, kind, id ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                }
+            if ( ( flags & 4 ) != 0 && SkipBytes( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            if ( ( flags & 8 ) != 0 && SkipEntityVec( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            if ( ( flags & 16 ) != 0 )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 4;
+                }
+            return KErrNone;
+            }
+        if ( c == 0x15b0f283u )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            const TUint32 u = GetU32( aP + aO );
+            if ( u == 0x59511722u || u == 0x36c6019au || u == 0xa2a5371eu )
+                {
+                TInt kind = 0;
+                TInt64 id = 0;
+                if ( SkipPeer( aP, aN, aO, kind, id ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                }
+            else
+                {
+                aO += 4;
+                if ( u == 0xd8292816u || u == 0xf21158aeu )
+                    {
+                    if ( Need( aO, aN, 16 ) != KErrNone )
+                        {
+                        return KErrCorrupt;
+                        }
+                    aO += 16;
+                    }
+                }
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            return KErrNone;
+            }
+        return KErrCorrupt;
+        }
+
+    SYMGRAM_NOINLINE TInt SkipDraft( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0xba4baec5u )
+            {
+            return KErrNone;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 flags = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0x1b0c841au )
+            {
+            if ( ( flags & 1 ) != 0 )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 4;
+                }
+            return KErrNone;
+            }
+        if ( ( flags & 16 ) != 0 )
+            {
+            if ( SkipInputReplyTo( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            }
+        else if ( ( flags & 1 ) != 0 )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            }
+        if ( SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( flags & 8 ) != 0 && SkipEntityVec( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( flags & 32 ) != 0 )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        if ( ( flags & 128 ) != 0 )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 8;
+            }
+        return KErrNone;
+        }
+
+    TInt SkipChatPhoto( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0x37c1011cu )
+            {
+            return KErrNone;
+            }
+        if ( Need( aO, aN, 12 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 flags = GetU32( aP + aO );
+        aO += 4;
+        aO += 8;
+        if ( ( flags & 2 ) != 0 && SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        return KErrNone;
+        }
+
+    TInt SkipPeer( const TUint8* aP, TInt aN, TInt& aO, TInt& aKind, TInt64& aId );
+
+    TInt SkipInputChannel( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0xee8c1e86u )
+            {
+            return KErrNone;
+            }
+        if ( c == 0xf35aec28u )
+            {
+            if ( Need( aO, aN, 16 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 16;
+            return KErrNone;
+            }
+        if ( c == 0x5b934f9du )
+            {
+            TInt kind = 0;
+            TInt64 id = 0;
+            if ( SkipPeer( aP, aN, aO, kind, id ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            if ( Need( aO, aN, 12 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 12;
+            }
+        return KErrNone;
+        }
+
+    TInt SkipAdminRights( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 8 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 8;
+        return KErrNone;
+        }
+
+    TInt SkipBannedRights( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 12 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 12;
+        return KErrNone;
+        }
+
+    TInt SkipStrVec3( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 8 ) != KErrNone ||
+             GetU32( aP + aO ) != 0x1cb5c415u )
+            {
+            return KErrCorrupt;
+            }
+        const TInt n = (TInt)GetU32( aP + aO + 4 );
+        aO += 8;
+        TInt i = 0;
+        for ( i = 0; i < n; i++ )
+            {
+            if ( SkipBytes( aP, aN, aO ) != KErrNone ||
+                 SkipBytes( aP, aN, aO ) != KErrNone ||
+                 SkipBytes( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            }
+        return KErrNone;
+        }
+
+    TInt SkipUsernames( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 8 ) != KErrNone ||
+             GetU32( aP + aO ) != 0x1cb5c415u )
+            {
+            return KErrCorrupt;
+            }
+        const TInt n = (TInt)GetU32( aP + aO + 4 );
+        aO += 8;
+        TInt i = 0;
+        for ( i = 0; i < n; i++ )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 8;
+            if ( SkipBytes( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            }
+        return KErrNone;
+        }
+
+    SYMGRAM_NOINLINE TInt SkipChatTail( const TUint8* aP, TInt aN, TInt& aO,
+                                        TUint32 aC, TUint32 aFlags,
+                                        TUint32 aFlags2 )
+        {
+        if ( aC == 0x41cbf256u )
+            {
+            if ( SkipChatPhoto( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            if ( Need( aO, aN, 12 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 12;
+            if ( ( aFlags & ( 1u << 6 ) ) != 0 &&
+                 SkipInputChannel( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            if ( ( aFlags & ( 1u << 14 ) ) != 0 &&
+                 SkipAdminRights( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            if ( ( aFlags & ( 1u << 18 ) ) != 0 &&
+                 SkipBannedRights( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            return KErrNone;
+            }
+        if ( ( aFlags & ( 1u << 6 ) ) != 0 &&
+             SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( SkipChatPhoto( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        if ( ( aFlags & ( 1u << 9 ) ) != 0 &&
+             SkipStrVec3( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( aFlags & ( 1u << 14 ) ) != 0 &&
+             SkipAdminRights( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( aFlags & ( 1u << 15 ) ) != 0 &&
+             SkipBannedRights( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( aFlags & ( 1u << 18 ) ) != 0 &&
+             SkipBannedRights( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( aFlags & ( 1u << 17 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            }
+        if ( ( aFlags2 & 1 ) != 0 &&
+             SkipUsernames( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
             }
         return KErrNone;
         }
@@ -819,7 +1329,8 @@ namespace
     TBool IsChatCtor( TUint32 aC )
         {
         return aC == 0x41cbf256u || aC == 0x83259464u || aC == 0x8261ac61u ||
-               aC == 0x6592a1a7u || aC == 0x17d493d5u || aC == 0x29562865u;
+               aC == 0x1c32b11cu || aC == 0x6592a1a7u || aC == 0x17d493d5u ||
+               aC == 0x29562865u;
         }
 
     TBool IsUserCtor( TUint32 aC )
@@ -921,20 +1432,24 @@ namespace
                 }
             return ETrue;
             }
-        if ( c != 0x41cbf256u && c != 0x83259464u && c != 0x8261ac61u )
+        if ( c != 0x41cbf256u && c != 0x83259464u && c != 0x8261ac61u &&
+             c != 0x1c32b11cu )
             {
             aO = start;
             return EFalse;
             }
-        if ( Need( aO, aN, c == 0x83259464u ? 16 : 12 ) != KErrNone )
+        if ( Need( aO, aN, ( c == 0x83259464u || c == 0x1c32b11cu ) ? 16 : 12 )
+             != KErrNone )
             {
             aO = start;
             return EFalse;
             }
         const TUint32 flags = GetU32( aP + aO );
         aO += 4;
-        if ( c == 0x83259464u )
+        TUint32 flags2 = 0;
+        if ( c == 0x83259464u || c == 0x1c32b11cu )
             {
+            flags2 = GetU32( aP + aO );
             aO += 4;
             }
         aOut.iId = (TInt64)GetU64( aP + aO );
@@ -962,15 +1477,18 @@ namespace
             aO = start;
             return EFalse;
             }
-        SkipToNextPeer( aP, aN, aO );
         return ETrue;
         }
 
     TBool NameFits( TInt aDlgKind, TInt aNameKind )
         {
-        if ( aDlgKind <= 1 )
+        if ( aDlgKind == 0 )
             {
-            return aNameKind <= 1;
+            return aNameKind >= 2;
+            }
+        if ( aDlgKind == 1 )
+            {
+            return aNameKind == 1;
             }
         if ( aDlgKind == 2 )
             {
@@ -980,7 +1498,7 @@ namespace
             {
             return aNameKind == 3 || aNameKind == 4;
             }
-        return aNameKind == aDlgKind;
+        return aNameKind == aDlgKind || aNameKind == 3;
         }
 
     TInt SkipPeer( const TUint8* aP, TInt aN, TInt& aO, TInt& aKind, TInt64& aId )
@@ -1010,6 +1528,121 @@ namespace
             aKind = 0;
             }
         return KErrNone;
+        }
+
+    TInt SkipFolder( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 12 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        const TUint32 flags = GetU32( aP + aO );
+        aO += 4;
+        aO += 4;
+        if ( SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( flags & 8 ) != 0 &&
+             SkipChatPhoto( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        return KErrNone;
+        }
+
+    TInt SkipDialogFolder( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 4;
+        if ( SkipFolder( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        TInt kind = 0;
+        TInt64 id = 0;
+        if ( SkipPeer( aP, aN, aO, kind, id ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, 20 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += 20;
+        return KErrNone;
+        }
+
+    TBool IsDialogCtor( TUint32 aC )
+        {
+        return aC == 0xd58a08c6u || aC == 0xa8edd0ebu || aC == 0x71bd134cu;
+        }
+
+    TBool IsPeerCtor( TUint32 aC )
+        {
+        return aC == 0x59511722u || aC == 0x36c6019au || aC == 0xa2a5371eu;
+        }
+
+    TInt FindNextDialog( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        while ( aO + 16 <= aN )
+            {
+            const TUint32 c = GetU32( aP + aO );
+            if ( c == 0x1cb5c415u )
+                {
+                return KErrNotFound;
+                }
+            if ( c == 0x71bd134cu )
+                {
+                return KErrNone;
+                }
+            if ( ( c == 0xd58a08c6u || c == 0xa8edd0ebu ) &&
+                 IsPeerCtor( GetU32( aP + aO + 8 ) ) )
+                {
+                return KErrNone;
+                }
+            aO += 4;
+            }
+        return KErrNotFound;
+        }
+
+    TBool PushName( TPeerName* aNames, TInt& aN, TInt aMax,
+                    const TPeerName& aOne )
+        {
+        if ( aOne.iId == 0 || aN >= aMax )
+            {
+            return EFalse;
+            }
+        TInt k = 0;
+        for ( k = 0; k < aN; k++ )
+            {
+            if ( aNames[ k ].iId == aOne.iId &&
+                 aNames[ k ].iKind == aOne.iKind )
+                {
+                if ( aNames[ k ].iName.Length() == 0 &&
+                     aOne.iName.Length() > 0 )
+                    {
+                    aNames[ k ].iName.Copy( aOne.iName );
+                    }
+                if ( aOne.iHash != 0 )
+                    {
+                    aNames[ k ].iHash = aOne.iHash;
+                    }
+                return EFalse;
+                }
+            }
+        aNames[ aN ].iId = aOne.iId;
+        aNames[ aN ].iHash = aOne.iHash;
+        aNames[ aN ].iKind = aOne.iKind;
+        aNames[ aN ].iName.Copy( aOne.iName );
+        aNames[ aN ].iSelf = aOne.iSelf;
+        aNames[ aN ].iDeleted = aOne.iDeleted;
+        aN++;
+        return ETrue;
         }
 
     TInt MigrateDcFromError( const TDesC8& aText )
@@ -1127,12 +1760,11 @@ namespace
 
     TInt SkipEntities( const TUint8* aP, TInt aN, TInt& aO )
         {
-        if ( Need( aO, aN, 8 ) != KErrNone || GetU32( aP + aO ) != 0x1cb5c415u )
+        TInt n = 0;
+        if ( ReadVecCount( aP, aN, aO, 256, n ) != KErrNone )
             {
             return KErrCorrupt;
             }
-        const TInt n = (TInt)GetU32( aP + aO + 4 );
-        aO += 8;
         TInt i = 0;
         for ( i = 0; i < n; i++ )
             {
@@ -1353,17 +1985,31 @@ namespace
 
     TInt SkipIntVector( const TUint8* aP, TInt aN, TInt& aO )
         {
-        if ( Need( aO, aN, 8 ) != KErrNone || GetU32( aP + aO ) != 0x1cb5c415u )
+        TInt n = 0;
+        if ( ReadVecCount( aP, aN, aO, 1024, n ) != KErrNone )
             {
             return KErrCorrupt;
             }
-        const TInt n = (TInt)GetU32( aP + aO + 4 );
-        aO += 8;
         if ( Need( aO, aN, n * 4 ) != KErrNone )
             {
             return KErrCorrupt;
             }
         aO += n * 4;
+        return KErrNone;
+        }
+
+    TInt SkipLongVector( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        TInt n = 0;
+        if ( ReadVecCount( aP, aN, aO, 256, n ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( Need( aO, aN, n * 8 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        aO += n * 8;
         return KErrNone;
         }
 
@@ -1413,17 +2059,16 @@ namespace
             aO += 8;
             return SkipIntVector( aP, aN, aO );
             }
-        return KErrNone;
+        return KErrCorrupt;
         }
 
     TInt SkipPhotoSizes( const TUint8* aP, TInt aN, TInt& aO )
         {
-        if ( Need( aO, aN, 8 ) != KErrNone || GetU32( aP + aO ) != 0x1cb5c415u )
+        TInt n = 0;
+        if ( ReadVecCount( aP, aN, aO, 16, n ) != KErrNone )
             {
             return KErrCorrupt;
             }
-        const TInt n = (TInt)GetU32( aP + aO + 4 );
-        aO += 8;
         TInt i = 0;
         for ( i = 0; i < n; i++ )
             {
@@ -1583,12 +2228,11 @@ namespace
             return KErrCorrupt;
             }
         aO += 4;
-        if ( Need( aO, aN, 8 ) != KErrNone || GetU32( aP + aO ) != 0x1cb5c415u )
+        TInt n = 0;
+        if ( ReadVecCount( aP, aN, aO, 32, n ) != KErrNone )
             {
             return KErrCorrupt;
             }
-        const TInt n = (TInt)GetU32( aP + aO + 4 );
-        aO += 8;
         TInt i = 0;
         aMsg.iKind = (TUint8)ESgFile;
         aMsg.iPhotoLoc = EFalse;
@@ -1731,27 +2375,28 @@ namespace
             else if ( ac == 0x6319d612u )
                 {
                 }
+            else if ( ac == 0x11b58939u || ac == 0x9801d8f9u ||
+                      ac == 0xfd80bd84u || ac == 0x3a36e31bu )
+                {
+                }
+            else if ( ac == 0x51448e5u )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aMsg.iDuration = GetI32( aP + aO );
+                aO += 4;
+                if ( SkipBytes( aP, aN, aO ) != KErrNone ||
+                     SkipBytes( aP, aN, aO ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aMsg.iKind = (TUint8)ESgAudio;
+                }
             else
                 {
-                if ( ac == 0x11b58939u || ac == 0x9801d8f9u ||
-                     ac == 0xfd80bd84u || ac == 0x3a36e31bu )
-                    {
-                    }
-                else if ( ac == 0x51448e5u )
-                    {
-                    if ( Need( aO, aN, 4 ) != KErrNone )
-                        {
-                        return KErrCorrupt;
-                        }
-                    aMsg.iDuration = GetI32( aP + aO );
-                    aO += 4;
-                    if ( SkipBytes( aP, aN, aO ) != KErrNone ||
-                         SkipBytes( aP, aN, aO ) != KErrNone )
-                        {
-                        return KErrCorrupt;
-                        }
-                    aMsg.iKind = (TUint8)ESgAudio;
-                    }
+                return KErrNone;
                 }
             }
         return KErrNone;
@@ -1923,6 +2568,221 @@ namespace
             }
         }
 
+    TInt SkipMessageAction( const TUint8* aP, TInt aN, TInt& aO )
+        {
+        if ( Need( aO, aN, 4 ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        const TUint32 c = GetU32( aP + aO );
+        aO += 4;
+        if ( c == 0xb6aef7b0u || c == 0x95bd5c42u || c == 0x95e3fbefu ||
+             c == 0x94bd38edu || c == 0x9fbab604u || c == 0x4792929bu ||
+             c == 0xf3f25f76u || c == 0xebbca3cbu )
+            {
+            return KErrNone;
+            }
+        if ( c == 0xb5a1ce5au || c == 0x95d2ac92u || c == 0xfae69f56u )
+            {
+            return SkipBytes( aP, aN, aO );
+            }
+        if ( c == 0xbd47cbadu )
+            {
+            if ( SkipBytes( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            return SkipLongVector( aP, aN, aO );
+            }
+        if ( c == 0x15cefd00u )
+            {
+            return SkipLongVector( aP, aN, aO );
+            }
+        if ( c == 0xa43f30ccu || c == 0x031224c3u || c == 0xe1037f92u )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 8;
+            return KErrNone;
+            }
+        if ( c == 0xea3948e9u )
+            {
+            if ( SkipBytes( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 8;
+            return KErrNone;
+            }
+        if ( c == 0x7fcb13a8u || c == 0x57de635eu )
+            {
+            TPreview dummy;
+            return ParsePhoto( aP, aN, aO, dummy );
+            }
+        if ( c == 0x92a72876u )
+            {
+            if ( Need( aO, aN, 12 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 12;
+            return KErrNone;
+            }
+        if ( c == 0x3c134d7bu )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            const TUint32 flags = GetU32( aP + aO );
+            aO += 8;
+            if ( ( flags & 1u ) != 0 )
+                {
+                if ( Need( aO, aN, 8 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 8;
+                }
+            return KErrNone;
+            }
+        return KErrNotSupported;
+        }
+
+    TInt SkipMsgTail( const TUint8* aP, TInt aN, TInt& aO, TUint32 aFlags )
+        {
+        if ( ( aFlags & ( 1u << 6 ) ) != 0 )
+            {
+            return KErrNotSupported;
+            }
+        if ( ( aFlags & ( 1u << 7 ) ) != 0 &&
+             SkipEntityVec( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( aFlags & ( 1u << 10 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 8;
+            }
+        if ( ( aFlags & ( 1u << 23 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 16 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            const TUint32 rf = GetU32( aP + aO + 4 );
+            aO += 16;
+            if ( ( rf & 2u ) != 0 )
+                {
+                TInt n = 0;
+                TInt i = 0;
+                TInt kind = 0;
+                TInt64 pid = 0;
+                if ( ReadVecCount( aP, aN, aO, 8, n ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                for ( i = 0; i < n; i++ )
+                    {
+                    if ( SkipPeer( aP, aN, aO, kind, pid ) != KErrNone )
+                        {
+                        return KErrCorrupt;
+                        }
+                    }
+                }
+            if ( ( rf & 1u ) != 0 )
+                {
+                if ( Need( aO, aN, 8 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 8;
+                }
+            if ( ( rf & 4u ) != 0 )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 4;
+                }
+            if ( ( rf & 8u ) != 0 )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 4;
+                }
+            }
+        if ( ( aFlags & ( 1u << 15 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            }
+        if ( ( aFlags & ( 1u << 16 ) ) != 0 &&
+             SkipBytes( aP, aN, aO ) != KErrNone )
+            {
+            return KErrCorrupt;
+            }
+        if ( ( aFlags & ( 1u << 17 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 8 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 8;
+            }
+        if ( ( aFlags & ( 1u << 20 ) ) != 0 )
+            {
+            return KErrNotSupported;
+            }
+        if ( ( aFlags & ( 1u << 22 ) ) != 0 )
+            {
+            TInt n = 0;
+            TInt i = 0;
+            if ( ReadVecCount( aP, aN, aO, 8, n ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            for ( i = 0; i < n; i++ )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 4;
+                if ( SkipBytes( aP, aN, aO ) != KErrNone ||
+                     SkipBytes( aP, aN, aO ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                }
+            }
+        if ( ( aFlags & ( 1u << 25 ) ) != 0 )
+            {
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            }
+        return KErrNone;
+        }
+
     TInt ReadMessage( const TUint8* aP, TInt aN, TInt& aO, TPreview& aMsg )
         {
         aMsg.iId = 0;
@@ -2026,6 +2886,14 @@ namespace
             aMsg.iKind = (TUint8)ESgService;
             _LIT( KSvc, "сервис" );
             aMsg.iText.Copy( KSvc );
+            SkipMessageAction( aP, aN, aO );
+            if ( ( flags & ( 1u << 25 ) ) != 0 )
+                {
+                if ( Need( aO, aN, 4 ) == KErrNone )
+                    {
+                    aO += 4;
+                    }
+                }
             return KErrNone;
             }
         if ( ReadStr( aP, aN, aO, aMsg.iText ) != KErrNone )
@@ -2046,6 +2914,7 @@ namespace
                 }
             LabelKind( aMsg );
             }
+        SkipMsgTail( aP, aN, aO, flags );
         return KErrNone;
         }
 
@@ -2084,7 +2953,7 @@ namespace
 
     _LIT8( KDevice, "Nokia N95 8GB" );
     _LIT8( KSystem, "Symbian OS 9.2" );
-    _LIT8( KAppVer, "0.2.12" );
+    _LIT8( KAppVer, SYMGRAM_VERSION_STRING );
     _LIT8( KLang, "ru" );
     _LIT8( KLangPack, "" );
 
@@ -2104,7 +2973,7 @@ namespace
     _LIT( KStatusFile, "Медиа..." );
     _LIT( KStatusUp, "Загрузка..." );
     _LIT( KStatusSaved, "Вход..." );
-    _LIT( KNeedApi, "Впишите api_id и api_hash в SymgramApi.h" );
+    _LIT( KNeedApi, "Скопируйте SymgramApiLocal.h.example" );
     _LIT8( KNeedPwdErr, "SESSION_PASSWORD_NEEDED" );
     _LIT8( KBadPwdErr, "PASSWORD_HASH_INVALID" );
     _LIT8( KSrpIdErr, "SRP_ID_INVALID" );
@@ -2143,6 +3012,12 @@ CSymgramSession::CSymgramSession( MSymgramSessionObserver& aObserver )
       iHaveSrp( EFalse ),
       iSrpTries( 0 ),
       iFloodUntil( 0 ),
+      iDlgPage( 0 ),
+      iDlgOffDate( 0 ),
+      iDlgOffMsg( 0 ),
+      iDlgOffId( 0 ),
+      iDlgOffKind( 0 ),
+      iDlgOffHash( 0 ),
       iSrpG( 0 ),
       iSrpId( 0 ),
       iRead( NULL, 0, 0 ),
@@ -2264,6 +3139,12 @@ void CSymgramSession::RefreshDialogsL()
         {
         return;
         }
+    iDlgPage = 0;
+    iDlgOffDate = 0;
+    iDlgOffMsg = 0;
+    iDlgOffId = 0;
+    iDlgOffKind = 0;
+    iDlgOffHash = 0;
     if ( iBusy )
         {
         iPendRpc = ERpcDialogs;
@@ -2534,7 +3415,7 @@ void CSymgramSession::SendGetHistoryNowL()
     PutU32( query, 0 );
     PutU32( query, 0 );
     PutU32( query, 0 );
-    PutU32( query, 20 );
+    PutU32( query, KHistLimit );
     PutU32( query, 0 );
     PutU32( query, 0 );
     PutU64( query, 0 );
@@ -2642,27 +3523,55 @@ TInt CSymgramSession::SessionFileName( TFileName& aOut )
     return KErrNone;
     }
 
-TInt CSymgramSession::LoadSession()
+TInt CSymgramSession::SessionBackupName( TFileName& aOut )
     {
-    TFileName fn;
-    if ( SessionFileName( fn ) != KErrNone )
+    aOut.Copy( PathInfo::PhoneMemoryRootPath() );
+    _LIT( KDir, "Symgram\\" );
+    aOut.Append( KDir );
+    const TInt mk = iFs.MkDirAll( aOut );
+    if ( mk != KErrNone && mk != KErrAlreadyExists )
         {
-        return KErrNotFound;
+        return mk;
         }
+    _LIT( KFn, "session.bin" );
+    aOut.Append( KFn );
+    return KErrNone;
+    }
+
+TInt CSymgramSession::ReadSessionBlob( const TDesC& aFn, TDes8& aRaw )
+    {
+    aRaw.Zero();
     RFile file;
-    if ( file.Open( iFs, fn, EFileRead | EFileStream | EFileShareReadersOnly )
+    if ( file.Open( iFs, aFn, EFileRead | EFileStream | EFileShareReadersOnly )
          != KErrNone )
         {
         return KErrNotFound;
         }
-    TBuf8<320> raw;
-    TInt err = file.Read( raw );
+    const TInt err = file.Read( aRaw );
     file.Close();
-    if ( err != KErrNone || raw.Length() < 309 )
+    if ( err != KErrNone || aRaw.Length() < 309 )
         {
         return KErrCorrupt;
         }
-    const TUint8* p = raw.Ptr();
+    return KErrNone;
+    }
+
+TInt CSymgramSession::WriteSessionBlob( const TDesC& aFn, const TDesC8& aRaw )
+    {
+    RFile file;
+    const TInt err = file.Replace( iFs, aFn, EFileWrite | EFileStream );
+    if ( err != KErrNone )
+        {
+        return err;
+        }
+    const TInt w = file.Write( aRaw );
+    file.Close();
+    return w;
+    }
+
+TInt CSymgramSession::ApplySessionBlob( const TDesC8& aRaw )
+    {
+    const TUint8* p = aRaw.Ptr();
     if ( GetU32( p ) != KSessionMagic )
         {
         return KErrCorrupt;
@@ -2691,14 +3600,38 @@ TInt CSymgramSession::LoadSession()
     return KErrNone;
     }
 
+TInt CSymgramSession::LoadSession()
+    {
+    TFileName fn;
+    TBuf8<320> raw;
+    if ( SessionFileName( fn ) == KErrNone &&
+         ReadSessionBlob( fn, raw ) == KErrNone &&
+         ApplySessionBlob( raw ) == KErrNone )
+        {
+        if ( SessionBackupName( fn ) == KErrNone )
+            {
+            WriteSessionBlob( fn, raw );
+            }
+        return KErrNone;
+        }
+    raw.Zero();
+    if ( SessionBackupName( fn ) == KErrNone &&
+         ReadSessionBlob( fn, raw ) == KErrNone &&
+         ApplySessionBlob( raw ) == KErrNone )
+        {
+        TFileName priv;
+        if ( SessionFileName( priv ) == KErrNone )
+            {
+            WriteSessionBlob( priv, raw );
+            }
+        return KErrNone;
+        }
+    return KErrNotFound;
+    }
+
 void CSymgramSession::SaveSession()
     {
     if ( iAuthKey.Length() != 256 || iAuthKeyId == 0 )
-        {
-        return;
-        }
-    TFileName fn;
-    if ( SessionFileName( fn ) != KErrNone )
         {
         return;
         }
@@ -2715,20 +3648,25 @@ void CSymgramSession::SaveSession()
         {
         raw.Append( 0 );
         }
-    RFile file;
-    TInt err = file.Replace( iFs, fn, EFileWrite | EFileStream );
-    if ( err != KErrNone )
+    TFileName fn;
+    if ( SessionFileName( fn ) == KErrNone )
         {
-        return;
+        WriteSessionBlob( fn, raw );
         }
-    file.Write( raw );
-    file.Close();
+    if ( SessionBackupName( fn ) == KErrNone )
+        {
+        WriteSessionBlob( fn, raw );
+        }
     }
 
 void CSymgramSession::DropSavedSession()
     {
     TFileName fn;
     if ( SessionFileName( fn ) == KErrNone )
+        {
+        iFs.Delete( fn );
+        }
+    if ( SessionBackupName( fn ) == KErrNone )
         {
         iFs.Delete( fn );
         }
@@ -4515,13 +5453,20 @@ void CSymgramSession::SendGetDialogsL()
         ReportFloodL();
         return;
         }
-    TBuf8<48> query;
+    TBuf8<80> query;
     PutU32( query, KGetDialogs );
     PutU32( query, 0 );
-    PutU32( query, 0 );
-    PutU32( query, 0 );
-    PutU32( query, KInputPeerEmpty );
-    PutU32( query, 20 );
+    PutU32( query, (TUint32)iDlgOffDate );
+    PutU32( query, (TUint32)iDlgOffMsg );
+    if ( iDlgPage == 0 || iDlgOffId == 0 )
+        {
+        PutU32( query, KInputPeerEmpty );
+        }
+    else
+        {
+        PutInputPeer( query, iDlgOffKind, iDlgOffId, iDlgOffHash );
+        }
+    PutU32( query, 30 );
     PutU32( query, 0 );
     PutU32( query, 0 );
     TBuf8<384> wrapped;
@@ -4574,18 +5519,33 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
         };
     TDlg dlg[ 30 ];
     TInt got = 0;
-    TInt i = 0;
-    for ( i = 0; i < dcount && got < 30; i++ )
+    TInt scanned = 0;
+    while ( got < 30 && scanned < dcount + 4 && o + 16 <= aLen )
         {
-        if ( Need( o, aLen, 8 ) != KErrNone )
+        if ( GetU32( aP + o ) == KTlVector )
             {
             break;
             }
+        if ( !IsDialogCtor( GetU32( aP + o ) ) )
+            {
+            if ( FindNextDialog( aP, aLen, o ) != KErrNone )
+                {
+                break;
+                }
+            }
+        scanned++;
         const TUint32 c = GetU32( aP + o );
         o += 4;
         if ( c == 0x71bd134cu )
             {
-            break;
+            if ( SkipDialogFolder( aP, aLen, o ) != KErrNone )
+                {
+                if ( FindNextDialog( aP, aLen, o ) != KErrNone )
+                    {
+                    break;
+                    }
+                }
+            continue;
             }
         const TUint32 flags = GetU32( aP + o );
         o += 4;
@@ -4593,7 +5553,11 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
         TInt64 id = 0;
         if ( SkipPeer( aP, aLen, o, kind, id ) != KErrNone )
             {
-            break;
+            if ( FindNextDialog( aP, aLen, o ) != KErrNone )
+                {
+                break;
+                }
+            continue;
             }
         if ( Need( o, aLen, 24 ) != KErrNone )
             {
@@ -4605,7 +5569,11 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
         o += 12;
         if ( SkipNotify( aP, aLen, o ) != KErrNone )
             {
-            break;
+            if ( FindNextDialog( aP, aLen, o ) != KErrNone )
+                {
+                break;
+                }
+            continue;
             }
         if ( ( flags & 1 ) != 0 )
             {
@@ -4617,14 +5585,13 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
             }
         if ( ( flags & 2 ) != 0 )
             {
-            if ( Need( o, aLen, 4 ) != KErrNone )
+            if ( SkipDraft( aP, aLen, o ) != KErrNone )
                 {
-                break;
-                }
-            o += 4;
-            if ( SkipBytes( aP, aLen, o ) != KErrNone )
-                {
-                break;
+                if ( FindNextDialog( aP, aLen, o ) != KErrNone )
+                    {
+                    break;
+                    }
+                continue;
                 }
             }
         if ( ( flags & 16 ) != 0 )
@@ -4696,82 +5663,34 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
         o = afterDialogs;
         }
 
-    TPeerName names[ 40 ];
+    TPeerName names[ 48 ];
     TInt nnames = 0;
-    TInt hunt = afterDialogs;
-    while ( hunt + 16 <= aLen )
+    TInt hunt = 0;
+    while ( hunt + 20 <= aLen && nnames < 48 )
         {
-        if ( GetU32( aP + hunt ) == KTlVector )
+        const TUint32 c = GetU32( aP + hunt );
+        if ( IsChatCtor( c ) )
             {
-            const TUint32 next = GetU32( aP + hunt + 8 );
-            if ( IsChatCtor( next ) || IsUserCtor( next ) )
+            TInt t = hunt;
+            TPeerName one;
+            if ( ConsumeChat( aP, aLen, t, one ) )
                 {
-                break;
+                PushName( names, nnames, 48, one );
+                }
+            }
+        else if ( IsUserCtor( c ) )
+            {
+            TInt t = hunt;
+            TPeerName one;
+            if ( ConsumeUser( aP, aLen, t, one ) )
+                {
+                PushName( names, nnames, 48, one );
                 }
             }
         hunt += 4;
         }
-    o = hunt;
-    if ( hunt + 16 <= aLen && GetU32( aP + hunt ) == KTlVector &&
-         IsChatCtor( GetU32( aP + hunt + 8 ) ) )
-        {
-        const TInt ccount = (TInt)GetU32( aP + hunt + 4 );
-        o = hunt + 8;
-        TInt ci = 0;
-        for ( ci = 0; ci < ccount && nnames < 40; ci++ )
-            {
-            TPeerName one;
-            if ( !ConsumeChat( aP, aLen, o, one ) )
-                {
-                break;
-                }
-            names[ nnames ].iId = one.iId;
-            names[ nnames ].iHash = one.iHash;
-            names[ nnames ].iKind = one.iKind;
-            names[ nnames ].iName.Copy( one.iName );
-            names[ nnames ].iSelf = EFalse;
-            names[ nnames ].iDeleted = EFalse;
-            nnames++;
-            }
-        }
-    if ( !( Need( o, aLen, 8 ) == KErrNone && GetU32( aP + o ) == KTlVector &&
-            IsUserCtor( GetU32( aP + o + 8 ) ) ) )
-        {
-        hunt = o;
-        while ( hunt + 16 <= aLen )
-            {
-            if ( GetU32( aP + hunt ) == KTlVector &&
-                 IsUserCtor( GetU32( aP + hunt + 8 ) ) )
-                {
-                o = hunt;
-                break;
-                }
-            hunt += 4;
-            }
-        }
-    if ( Need( o, aLen, 8 ) == KErrNone && GetU32( aP + o ) == KTlVector &&
-         IsUserCtor( GetU32( aP + o + 8 ) ) )
-        {
-        const TInt ucount = (TInt)GetU32( aP + o + 4 );
-        o += 8;
-        TInt ui = 0;
-        for ( ui = 0; ui < ucount && nnames < 40; ui++ )
-            {
-            TPeerName one;
-            if ( !ConsumeUser( aP, aLen, o, one ) )
-                {
-                break;
-                }
-            names[ nnames ].iId = one.iId;
-            names[ nnames ].iHash = one.iHash;
-            names[ nnames ].iKind = one.iKind;
-            names[ nnames ].iName.Copy( one.iName );
-            names[ nnames ].iSelf = one.iSelf;
-            names[ nnames ].iDeleted = one.iDeleted;
-            nnames++;
-            }
-        }
 
+    TInt i = 0;
     for ( i = 0; i < got; i++ )
         {
         TSymgramChat chat;
@@ -4795,6 +5714,7 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
                 if ( names[ k ].iHash != 0 )
                     {
                     chat.iHash = names[ k ].iHash;
+                    dlg[ i ].iHash = names[ k ].iHash;
                     }
                 if ( names[ k ].iKind != 0 )
                     {
@@ -4821,6 +5741,28 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
         }
     SaveSession();
     iObserver.SessionChatsReadyL();
+    if ( root == KDialogsSlice && got > 0 && iDlgPage < 2 )
+        {
+        iDlgOffId = dlg[ got - 1 ].iId;
+        iDlgOffKind = dlg[ got - 1 ].iKind;
+        iDlgOffMsg = dlg[ got - 1 ].iTopMsg;
+        iDlgOffHash = dlg[ got - 1 ].iHash;
+        iDlgOffDate = 0;
+        TInt m = 0;
+        for ( m = 0; m < nmsgs; m++ )
+            {
+            if ( msgs[ m ].iId == dlg[ got - 1 ].iTopMsg )
+                {
+                iDlgOffDate = msgs[ m ].iDate;
+                break;
+                }
+            }
+        iDlgPage++;
+        SendGetDialogsL();
+        return;
+        }
+    iDlgPage = 0;
+    iDlgOffId = 0;
     SendGetContactsL();
     }
 
@@ -4961,11 +5903,60 @@ void CSymgramSession::HandleHistoryL( const TUint8* aP, TInt aLen )
     const TUint32 root = GetU32( aP );
     if ( root == KMessagesSlice )
         {
-        o += 4;
+        if ( Need( o, aLen, 8 ) != KErrNone )
+            {
+            iBusy = EFalse;
+            iRpc = ERpcNone;
+            FlushPendingL();
+            return;
+            }
+        const TUint32 flags = GetU32( aP + o );
+        o += 8;
+        if ( ( flags & 1u ) != 0 )
+            {
+            if ( Need( o, aLen, 4 ) != KErrNone )
+                {
+                iBusy = EFalse;
+                iRpc = ERpcNone;
+                FlushPendingL();
+                return;
+                }
+            o += 4;
+            }
+        if ( ( flags & 4u ) != 0 )
+            {
+            if ( Need( o, aLen, 4 ) != KErrNone )
+                {
+                iBusy = EFalse;
+                iRpc = ERpcNone;
+                FlushPendingL();
+                return;
+                }
+            o += 4;
+            }
         }
     else if ( root == KChannelMsgs )
         {
+        if ( Need( o, aLen, 12 ) != KErrNone )
+            {
+            iBusy = EFalse;
+            iRpc = ERpcNone;
+            FlushPendingL();
+            return;
+            }
+        const TUint32 flags = GetU32( aP + o );
         o += 12;
+        if ( ( flags & 4u ) != 0 )
+            {
+            if ( Need( o, aLen, 4 ) != KErrNone )
+                {
+                iBusy = EFalse;
+                iRpc = ERpcNone;
+                FlushPendingL();
+                return;
+                }
+            o += 4;
+            }
         }
     else if ( root != KMessages )
         {
@@ -4986,8 +5977,8 @@ void CSymgramSession::HandleHistoryL( const TUint8* aP, TInt aLen )
     iObserver.SessionBeginMessagesL( iPeerId );
     TInt scan = o;
     TInt got = 0;
-    TPreview buf[ 12 ];
-    while ( scan + 16 <= aLen && got < 12 && got < mcount )
+    TInt start[ 8 ];
+    while ( scan + 16 <= aLen && got < KHistLimit && got < mcount )
         {
         const TUint32 c = GetU32( aP + scan );
         if ( c == 0x38116ee0u || c == 0x2b085862u ||
@@ -5000,11 +5991,14 @@ void CSymgramSession::HandleHistoryL( const TUint8* aP, TInt aLen )
                 if ( one.iId != 0 &&
                      one.iDate > 1000000000 && one.iDate < 2000000000 )
                     {
-                    buf[ got ] = one;
+                    start[ got ] = scan;
                     got++;
                     }
-                scan = t;
-                continue;
+                if ( t > scan )
+                    {
+                    scan = t;
+                    continue;
+                    }
                 }
             }
         scan += 4;
@@ -5012,18 +6006,24 @@ void CSymgramSession::HandleHistoryL( const TUint8* aP, TInt aLen )
     TInt i = 0;
     for ( i = got - 1; i >= 0; i-- )
         {
+        TInt t = start[ i ];
+        TPreview one;
+        if ( ReadMessage( aP, aLen, t, one ) != KErrNone )
+            {
+            continue;
+            }
         TSymgramMsg m;
-        m.iId = buf[ i ].iId;
-        m.iDate = buf[ i ].iDate;
-        m.iOut = buf[ i ].iOut;
-        m.iKind = buf[ i ].iKind;
-        m.iDuration = buf[ i ].iDuration;
-        m.iPhotoLoc = buf[ i ].iPhotoLoc;
-        m.iFileId = buf[ i ].iFileId;
-        m.iFileHash = buf[ i ].iFileHash;
-        m.iFileRef.Copy( buf[ i ].iFileRef );
-        m.iFileName.Copy( buf[ i ].iFileName );
-        m.iText.Copy( buf[ i ].iText.Left( m.iText.MaxLength() ) );
+        m.iId = one.iId;
+        m.iDate = one.iDate;
+        m.iOut = one.iOut;
+        m.iKind = one.iKind;
+        m.iDuration = one.iDuration;
+        m.iPhotoLoc = one.iPhotoLoc;
+        m.iFileId = one.iFileId;
+        m.iFileHash = one.iFileHash;
+        m.iFileRef.Copy( one.iFileRef );
+        m.iFileName.Copy( one.iFileName );
+        m.iText.Copy( one.iText.Left( m.iText.MaxLength() ) );
         m.iBmp = NULL;
         iObserver.SessionAddMessageL( m );
         }
@@ -5417,21 +6417,38 @@ HBufC8* CSymgramSession::UnzipPackedLC( const TUint8* aObj, TInt aLen )
     {
     const TUint8* packed = NULL;
     TInt plen = 0;
+    _LIT( KGz, "Сжатый ответ" );
     if ( aLen < 5 || TlReadBytes( aObj + 4, aLen - 4, packed, plen ) < 0 )
         {
-        FailL( KErrCorrupt );
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        iState = EIdle;
+        iObserver.SessionStatusL( KGz );
         return NULL;
         }
-    HBufC8* raw = HBufC8::NewLC( 65536 );
+    HBufC8* raw = HBufC8::NewLC( KMaxUnzip );
     TPtr8 rp = raw->Des();
-    rp.SetLength( 65536 );
+    rp.SetLength( KMaxUnzip );
     TInt n = 0;
-    if ( InflateTlGzip( packed, plen, const_cast<TUint8*>( rp.Ptr() ),
-                        65536, n ) != KErrNone || n < 4 )
+    const TInt err = InflateTlGzip( packed, plen,
+                                    const_cast<TUint8*>( rp.Ptr() ),
+                                    KMaxUnzip, n );
+    if ( n < 4 )
         {
         CleanupStack::PopAndDestroy( raw );
-        _LIT( KGz, "Сжатый ответ" );
-        FailTextL( KGz );
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        iState = EIdle;
+        iObserver.SessionStatusL( KGz );
+        return NULL;
+        }
+    if ( err != KErrNone && err != KErrOverflow )
+        {
+        CleanupStack::PopAndDestroy( raw );
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        iState = EIdle;
+        iObserver.SessionStatusL( KGz );
         return NULL;
         }
     rp.SetLength( n );

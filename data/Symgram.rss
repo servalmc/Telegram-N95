@@ -90,6 +90,11 @@ RESOURCE MENU_PANE r_symgram_menu
             },
         MENU_ITEM
             {
+            command = ESymgramCmdUpdate;
+            txt = STRING_r_symgram_menu_update;
+            },
+        MENU_ITEM
+            {
             command = ESymgramCmdLogout;
             txt = STRING_r_symgram_menu_logout;
             },

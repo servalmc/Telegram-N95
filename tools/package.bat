@@ -1,6 +1,10 @@
 @echo off
 rem Builds a self-signed Symgram.sisx from an existing GCCE release build.
-rem Generates a self-signing certificate on first run; both are gitignored.
+rem
+rem sis\selfsign.cer and sis\selfsign.key are the upgrade identity. They live
+rem in git so every GitHub build signs with the same certificate. Generating a
+rem new pair would make the phone refuse an in-place upgrade (or wipe the
+rem private folder, including session.bin).
 
 setlocal
 call "%~dp0symbian-env.bat" || exit /b 1
@@ -10,10 +14,10 @@ set "SIGN_PASS=symgram"
 cd /d "%~dp0..\sis" || exit /b 1
 
 if not exist selfsign.cer (
-    echo Generating self-signing certificate...
-    call makekeys -cert -password %SIGN_PASS% -len 1024 ^
-        -dname "CN=Symgram OU=Development OR=Self-signed CO=FI" ^
-        selfsign.key selfsign.cer || exit /b 1
+    echo ERROR: sis\selfsign.cer is missing.
+    echo Restore it from git. Do not run makekeys — a new certificate cannot
+    echo upgrade an already-installed Symgram and will force a re-login.
+    exit /b 1
 )
 
 call makesis Symgram.pkg Symgram.sis || exit /b 1

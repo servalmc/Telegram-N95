@@ -13,6 +13,7 @@
 #include <DocumentHandler.h>
 #include <apmstd.h>
 #include <PathInfo.h>
+#include <w32std.h>
 #include <Symgram.rsg>
 
 #include "SymgramVersion.h"
@@ -165,6 +166,28 @@ namespace
         return 0;
         }
 
+    const TUint KEmojiList[] =
+        {
+        0x1F600, 0x1F602, 0x1F60A, 0x1F60D, 0x1F609, 0x1F618,
+        0x1F622, 0x1F62D, 0x1F621, 0x1F44D, 0x1F44E, 0x1F44C,
+        0x2764,  0x1F525, 0x2B50,  0x1F389, 0x1F44F, 0x1F64F,
+        0x1F60E, 0x1F914, 0x1F605, 0x1F923, 0x1F49C, 0x2728
+        };
+    const TInt KEmojiCount = 24;
+
+    TInt EmojiSlot( TUint aCp )
+        {
+        TInt i = 0;
+        for ( i = 0; i < KEmojiCount; i++ )
+            {
+            if ( KEmojiList[ i ] == aCp )
+                {
+                return i;
+                }
+            }
+        return -1;
+        }
+
     void FoldVisible( TDes& aText )
         {
         TBuf<140> tmp;
@@ -238,8 +261,20 @@ namespace
         aText.Copy( tmp.Left( aText.MaxLength() ) );
         }
 
-    void DrawEmojiIcon( CWindowGc& aGc, TInt aX, TInt aY, TInt aSz, TUint aCp )
+    void DrawEmojiIcon( CWindowGc& aGc, TInt aX, TInt aY, TInt aSz, TUint aCp,
+                        CFbsBitmap* aBmp, CFbsBitmap* aMask )
         {
+        if ( aBmp && aMask && aSz > 4 )
+            {
+            const TSize srcSz = aBmp->SizeInPixels();
+            if ( srcSz.iWidth > 0 && srcSz.iHeight > 0 )
+                {
+                aGc.DrawBitmapMasked( TRect( aX, aY, aX + aSz, aY + aSz ),
+                                      aBmp, TRect( TPoint( 0, 0 ), srcSz ),
+                                      aMask, EFalse );
+                return;
+                }
+            }
         const TInt st = EmojiStyle( aCp );
         const TRect r( aX, aY, aX + aSz, aY + aSz );
         aGc.SetPenStyle( CGraphicsContext::ENullPen );
@@ -350,15 +385,16 @@ namespace
         }
 
     void DrawMsgText( CWindowGc& aGc, const CFont& aFont, const TRect& aBox,
-                      const TDesC& aText )
+                      const TDesC& aText, CFbsBitmap* const* aBmp,
+                      CFbsBitmap* const* aMask )
         {
         TInt x = aBox.iTl.iX;
         const TInt y = aBox.iTl.iY;
         const TInt maxX = aBox.iBr.iX;
         TInt sz = aFont.HeightInPixels();
-        if ( sz > 14 )
+        if ( sz < 12 )
             {
-            sz = 14;
+            sz = 12;
             }
         TInt i = 0;
         TBuf<96> run;
@@ -388,9 +424,17 @@ namespace
                     {
                     break;
                     }
+                CFbsBitmap* bmp = NULL;
+                CFbsBitmap* mask = NULL;
+                const TInt slot = EmojiSlot( cp );
+                if ( slot >= 0 && aBmp && aMask )
+                    {
+                    bmp = aBmp[ slot ];
+                    mask = aMask[ slot ];
+                    }
                 DrawEmojiIcon( aGc, x,
                                y + ( aFont.HeightInPixels() - sz ) / 2,
-                               sz, cp );
+                               sz, cp, bmp, mask );
                 aGc.UseFont( &aFont );
                 aGc.SetPenStyle( CGraphicsContext::ESolidPen );
                 aGc.SetPenColor( Ink() );
@@ -428,15 +472,6 @@ namespace
             }
         aGc.DiscardFont();
         }
-
-    const TUint KEmojiList[] =
-        {
-        0x1F600, 0x1F602, 0x1F60A, 0x1F60D, 0x1F609, 0x1F618,
-        0x1F622, 0x1F62D, 0x1F621, 0x1F44D, 0x1F44E, 0x1F44C,
-        0x2764,  0x1F525, 0x2B50,  0x1F389, 0x1F44F, 0x1F64F,
-        0x1F60E, 0x1F914, 0x1F605, 0x1F923, 0x1F49C, 0x2728
-        };
-    const TInt KEmojiCount = 24;
 
     void AppendCp( TDes& aOut, TUint aCp )
         {
@@ -581,6 +616,7 @@ CSymgramAppView* CSymgramAppView::NewLC( const TRect& aRect )
 
 CSymgramAppView::CSymgramAppView()
     : iTitleFont( NULL ), iNameFont( NULL ), iTextFont( NULL ),
+      iChatFont( NULL ),
       iStatus( NULL ), iSignInTitle( NULL ), iSignInHint( NULL ),
       iEmptyTitle( NULL ), iEmptyDetail( NULL ), iCodeTitle( NULL ), iCodeHint( NULL ),
       iPasswordPrompt( NULL ), iPasswordHint( NULL ), iFieldCountry( NULL ),
@@ -588,14 +624,34 @@ CSymgramAppView::CSymgramAppView()
       iCountries( NULL ), iSignedIn( EFalse ), iAwaitingCode( EFalse ),
       iAwaitingPassword( EFalse ), iPickingCountry( EFalse ), iFocus( 0 ),
       iCountry( 2 ), iSession( NULL ), iStore( NULL ), iJpeg( NULL ),
+      iUpdate( NULL ),
       iNavDown( 0 ), iTab( 0 ), iPane( 0 ), iSelected( 0 ), iTopRow( 0 ),
       iInChat( EFalse ), iOpenId( 0 ), iThumbAt( 0 ), iSetSel( 0 ),
       iPick( 0 ), iPickSel( 0 ), iMsgSel( 0 ), iFiles( NULL )
     {
+    TInt e = 0;
+    for ( e = 0; e < KEmojiCount; e++ )
+        {
+        iEmojiBmp[ e ] = NULL;
+        iEmojiMask[ e ] = NULL;
+        }
     }
 
 CSymgramAppView::~CSymgramAppView()
     {
+    TInt e = 0;
+    for ( e = 0; e < KEmojiCount; e++ )
+        {
+        delete iEmojiBmp[ e ];
+        iEmojiBmp[ e ] = NULL;
+        delete iEmojiMask[ e ];
+        iEmojiMask[ e ] = NULL;
+        }
+    if ( iChatFont )
+        {
+        iCoeEnv->ReleaseScreenFont( iChatFont );
+        iChatFont = NULL;
+        }
     delete iJpeg;
     iJpeg = NULL;
     ClearMessages();
@@ -604,8 +660,10 @@ CSymgramAppView::~CSymgramAppView()
     iMsgs.Close();
     delete iFiles;
     iFiles = NULL;
-    delete iJpeg;
     delete iSession;
+    iSession = NULL;
+    delete iUpdate;
+    iUpdate = NULL;
     delete iStore;
     delete iCountries;
     delete iStatus;
@@ -629,6 +687,23 @@ void CSymgramAppView::ConstructL( const TRect& aRect )
     iTitleFont = AknLayoutUtils::FontFromId( EAknLogicalFontSecondaryFont );
     iNameFont  = AknLayoutUtils::FontFromId( EAknLogicalFontPrimaryFont );
     iTextFont  = AknLayoutUtils::FontFromId( EAknLogicalFontSecondaryFont );
+    TInt e = 0;
+    for ( e = 0; e < KEmojiCount; e++ )
+        {
+        iEmojiBmp[ e ] = NULL;
+        iEmojiMask[ e ] = NULL;
+        }
+    if ( iTextFont )
+        {
+        TFontSpec spec = iTextFont->FontSpecInTwips();
+        spec.iHeight = ( spec.iHeight * 5 ) / 2;
+        TRAPD( ferr, iChatFont = iCoeEnv->CreateScreenFontL( spec ) );
+        if ( ferr != KErrNone )
+            {
+            iChatFont = NULL;
+            }
+        }
+    TRAP_IGNORE( LoadEmojiL() );
 
     iStatus      = StringLoader::LoadL( R_SYMGRAM_STATUS_UNSIGNED );
     iSignInTitle = StringLoader::LoadL( R_SYMGRAM_SIGNIN_TITLE );
@@ -646,6 +721,7 @@ void CSymgramAppView::ConstructL( const TRect& aRect )
     iCountries = CEikonEnv::Static()->ReadDesCArrayResourceL( R_SYMGRAM_COUNTRIES );
     iStore = CSymgramStore::NewL();
     iJpeg = new ( ELeave ) CSymgramJpeg( *this );
+    iUpdate = CSymgramUpdate::NewL( *this );
     iSession = CSymgramSession::NewL( *this );
     TRAP_IGNORE( iStore->LoadChatsL( iChats ) );
     TRAP_IGNORE( iStore->LoadContactsL( iContacts ) );
@@ -673,6 +749,32 @@ void CSymgramAppView::SetStatusL( const TDesC& aStatus )
     delete iStatus;
     iStatus = status;
     DrawDeferred();
+    }
+
+const CFont* CSymgramAppView::ChatFont() const
+    {
+    return iChatFont ? iChatFont : iTextFont;
+    }
+
+void CSymgramAppView::LoadEmojiL()
+    {
+    TFileName fn;
+    _LIT( KFile, "\\resource\\apps\\Symgram_emoji.mbm" );
+    fn.Copy( KFile );
+    User::LeaveIfError( CompleteWithAppPath( fn ) );
+    TInt i = 0;
+    for ( i = 0; i < KEmojiCount; i++ )
+        {
+        CFbsBitmap* bmp = new ( ELeave ) CFbsBitmap;
+        CleanupStack::PushL( bmp );
+        CFbsBitmap* mask = new ( ELeave ) CFbsBitmap;
+        CleanupStack::PushL( mask );
+        User::LeaveIfError( bmp->Load( fn, i * 2 ) );
+        User::LeaveIfError( mask->Load( fn, i * 2 + 1 ) );
+        iEmojiBmp[ i ] = bmp;
+        iEmojiMask[ i ] = mask;
+        CleanupStack::Pop( 2 );
+        }
     }
 
 TInt CSymgramAppView::HeaderHeight() const
@@ -916,8 +1018,15 @@ TKeyResponse CSymgramAppView::OfferKeyEventL( const TKeyEvent& aKeyEvent,
                         }
                     else if ( iSelected == 3 )
                         {
-                        _LIT( KAbout, "Symgram 0.2.12" );
-                        SetStatusL( KAbout );
+                        CheckUpdateL();
+                        }
+                    else if ( iSelected == 4 )
+                        {
+                        TBuf<24> about;
+                        about.Copy( KSymgramAppName );
+                        about.Append( ' ' );
+                        about.Append( KSymgramVersionName );
+                        SetStatusL( about );
                         }
                     }
                 else if ( iPane == 1 )
@@ -1964,6 +2073,11 @@ void CSymgramAppView::SessionAddChatL( const TSymgramChat& aChat )
                     {
                     iChats[ i ].iName.Copy( aChat.iName );
                     }
+                else if ( aChat.iPeerKind >= 2 &&
+                          iChats[ i ].iPeerKind <= 1 )
+                    {
+                    iChats[ i ].iName.Copy( KDlg );
+                    }
                 }
             iChats[ i ].iUnread = aChat.iUnread;
             iChats[ i ].iDate = aChat.iDate;
@@ -1971,7 +2085,11 @@ void CSymgramAppView::SessionAddChatL( const TSymgramChat& aChat )
                 {
                 iChats[ i ].iHash = aChat.iHash;
                 }
-            if ( aChat.iPeerKind != 0 &&
+            if ( aChat.iPeerKind >= 2 )
+                {
+                iChats[ i ].iPeerKind = aChat.iPeerKind;
+                }
+            else if ( aChat.iPeerKind != 0 &&
                  !( iChats[ i ].iPeerKind >= 2 && aChat.iPeerKind == 1 ) )
                 {
                 iChats[ i ].iPeerKind = aChat.iPeerKind;
@@ -2228,11 +2346,12 @@ void CSymgramAppView::CloseChat()
 
 void CSymgramAppView::DrawChat( CWindowGc& aGc, const TRect& aRect ) const
     {
-    if ( !iTextFont )
+    const CFont* font = ChatFont();
+    if ( !font )
         {
         return;
         }
-    const TInt line = iTextFont->HeightInPixels() + 6;
+    const TInt line = font->HeightInPixels() + 6;
     TInt y = aRect.iBr.iY - line - 4;
     TInt i = iMsgs.Count() - 1 - iTopRow;
     for ( ; i >= 0 && y > aRect.iTl.iY + 4; i-- )
@@ -2362,10 +2481,11 @@ void CSymgramAppView::DrawSettings( CWindowGc& aGc, const TRect& aRect ) const
     _LIT( KAcc, "Аккаунт" );
     _LIT( KOut, "Выйти" );
     _LIT( KCache, "Очистить кэш" );
+    _LIT( KUpd, "Обновление" );
     _LIT( KAbout, "О программе" );
     const TInt rowH = RowHeight();
     TInt i = 0;
-    for ( i = 0; i < 4; i++ )
+    for ( i = 0; i < 5; i++ )
         {
         TRect row( aRect.iTl.iX, aRect.iTl.iY + i * rowH,
                    aRect.iBr.iX, aRect.iTl.iY + ( i + 1 ) * rowH );
@@ -2398,6 +2518,11 @@ void CSymgramAppView::DrawSettings( CWindowGc& aGc, const TRect& aRect ) const
             aGc.DrawText( KCache, nameBox, iNameFont->AscentInPixels(),
                           CGraphicsContext::ELeft );
             }
+        else if ( i == 3 )
+            {
+            aGc.DrawText( KUpd, nameBox, iNameFont->AscentInPixels(),
+                          CGraphicsContext::ELeft );
+            }
         else
             {
             aGc.DrawText( KAbout, nameBox, iNameFont->AscentInPixels(),
@@ -2413,6 +2538,27 @@ void CSymgramAppView::DrawSettings( CWindowGc& aGc, const TRect& aRect ) const
                      row.iBr.iX - 8, row.iBr.iY - 2 );
             aGc.DrawText( phone, d, iTextFont->AscentInPixels(),
                           CGraphicsContext::ELeft );
+            aGc.DiscardFont();
+            }
+        else if ( i == 3 && iTextFont )
+            {
+            aGc.UseFont( iTextFont );
+            aGc.SetPenColor( Muted() );
+            TRect d( row.iTl.iX + 8,
+                     nameBox.iBr.iY + 2,
+                     row.iBr.iX - 8, row.iBr.iY - 2 );
+            if ( iUpdate && iUpdate->RemoteTag().Length() > 0 )
+                {
+                aGc.DrawText( iUpdate->RemoteTag(), d,
+                              iTextFont->AscentInPixels(),
+                              CGraphicsContext::ELeft );
+                }
+            else
+                {
+                aGc.DrawText( KSymgramVersionName, d,
+                              iTextFont->AscentInPixels(),
+                              CGraphicsContext::ELeft );
+                }
             aGc.DiscardFont();
             }
         }
@@ -2488,9 +2634,10 @@ void CSymgramAppView::DrawBubble( CWindowGc& aGc, const TRect& aBox,
         }
     if ( iTextFont && aMsg.iText.Length() > 0 )
         {
+        const CFont* font = ChatFont();
         TRect tb( aBox.iTl.iX + 6, y, aBox.iBr.iX - 6,
-                  y + iTextFont->HeightInPixels() );
-        DrawMsgText( aGc, *iTextFont, tb, aMsg.iText );
+                  y + font->HeightInPixels() );
+        DrawMsgText( aGc, *font, tb, aMsg.iText, iEmojiBmp, iEmojiMask );
         }
     }
 
@@ -2570,7 +2717,7 @@ TInt CSymgramAppView::CurrentCount() const
         }
     if ( iPane == 2 )
         {
-        return 4;
+        return 5;
         }
     return ChatCount();
     }
@@ -2650,6 +2797,10 @@ void CSymgramAppView::ShowSettingsL()
     iPane = 2;
     iSelected = 0;
     iTopRow = 0;
+    if ( iUpdate )
+        {
+        iUpdate->PeekLocal();
+        }
     DrawDeferred();
     }
 
@@ -2885,7 +3036,7 @@ void CSymgramAppView::DrawEmojiPicker( CWindowGc& aGc, const TRect& aRect ) cons
             {
             DrawEmojiIcon( aGc, cell.iTl.iX + ( cw - sz ) / 2,
                            cell.iTl.iY + ( ch - sz ) / 2, sz,
-                           KEmojiList[ i ] );
+                           KEmojiList[ i ], iEmojiBmp[ i ], iEmojiMask[ i ] );
             }
         }
     if ( iTextFont )
@@ -2961,7 +3112,7 @@ void CSymgramAppView::EnsureMsgVisible()
         }
     const TInt pos = iMsgs.Count() - 1 - iMsgSel;
     TInt vis = 4;
-    const TInt h = iTextFont ? iTextFont->HeightInPixels() + 14 : 28;
+    const TInt h = ChatFont() ? ChatFont()->HeightInPixels() + 14 : 28;
     const TInt rh = ListRect().Height();
     if ( h > 0 && rh > 0 )
         {
@@ -3138,6 +3289,32 @@ void CSymgramAppView::LogoutAskL()
         return;
         }
     iSession->LogoutL();
+    }
+
+void CSymgramAppView::CheckUpdateL()
+    {
+    if ( !iUpdate )
+        {
+        return;
+        }
+    iUpdate->PeekLocal();
+    if ( iUpdate->PackageNewer() ||
+         ( iUpdate->NetDone() && iUpdate->CanInstall() ) )
+        {
+        OpenSystemL( iUpdate->PackagePath() );
+        return;
+        }
+    iUpdate->StartL();
+    }
+
+void CSymgramAppView::UpdateStatusL( const TDesC& aText )
+    {
+    SetStatusL( aText );
+    }
+
+void CSymgramAppView::UpdateReadyL()
+    {
+    DrawDeferred();
     }
 
 void CSymgramAppView::SizeChanged()

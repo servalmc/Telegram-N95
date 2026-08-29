@@ -2,7 +2,7 @@
 ; Language order below drives the {} blocks: first entry is Russian, second English.
 &RU,EN
 
-#{"Symgram","Symgram"},(0xE0A11E95),0,2,12
+#{"Symgram","Symgram"},(0xE0A11E95),0,2,18
 
 %{"Symgram","Symgram"}
 :"Symgram"
@@ -26,3 +26,5 @@
 ; Application icon. Bitmap icons live in an .mbm; the .mif mifconv emits
 ; alongside it stays empty and is not shipped.
 "\Symbian\9.2\S60_3rd_FP1\epoc32\data\z\resource\apps\Symgram_aif.mbm" -"!:\resource\apps\Symgram_aif.mbm"
+
+"\Symbian\9.2\S60_3rd_FP1\epoc32\data\z\resource\apps\Symgram_emoji.mbm" -"!:\resource\apps\Symgram_emoji.mbm"

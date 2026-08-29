@@ -5,13 +5,14 @@
 
 #define SYMGRAM_VERSION_MAJOR 0
 #define SYMGRAM_VERSION_MINOR 2
-#define SYMGRAM_VERSION_BUILD 12
+#define SYMGRAM_VERSION_BUILD 18
+#define SYMGRAM_VERSION_STRING "0.2.18"
 
 _LIT( KSymgramAppName, "Symgram" );
-_LIT( KSymgramVersionName, "0.2.12" );
+_LIT( KSymgramVersionName, "0.2.18" );
 
 // Kept in sync with the tag pushed to GitHub; the update check compares
 // against the tag name of the latest release.
-_LIT( KSymgramReleaseTag, "v0.2.12" );
+_LIT( KSymgramReleaseTag, "v0.2.18" );
 
 #endif // __SYMGRAMVERSION_H__

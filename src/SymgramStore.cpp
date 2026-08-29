@@ -167,7 +167,7 @@ void CSymgramStore::LoadChatsL( RArray<TSymgramChat>& aChats )
     const TInt n = (TInt)GetU32( p.Ptr() + 4 );
     TInt o = 8;
     TInt i = 0;
-    for ( i = 0; i < n && i < 40; i++ )
+    for ( i = 0; i < n && i < 80; i++ )
         {
         if ( o + 28 > p.Length() )
             {
@@ -199,9 +199,9 @@ void CSymgramStore::SaveChats( const RArray<TSymgramChat>& aChats )
         return;
         }
     TInt n = aChats.Count();
-    if ( n > 40 )
+    if ( n > 80 )
         {
-        n = 40;
+        n = 80;
         }
     TInt cap = 8 + n * 400;
     HBufC8* raw = HBufC8::New( cap );

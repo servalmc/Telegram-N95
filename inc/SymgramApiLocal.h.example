@@ -1,0 +1,11 @@
+#ifndef __SYMGRAMAPILOCAL_H__
+#define __SYMGRAMAPILOCAL_H__
+
+#include <e32base.h>
+
+// Credentials from https://my.telegram.org — API development tools.
+// This file is gitignored. Copy it to SymgramApiLocal.h and paste your values.
+const TInt KSymgramApiId = 0;
+_LIT8( KSymgramApiHash, "" );
+
+#endif

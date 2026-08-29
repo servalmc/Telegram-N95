@@ -122,6 +122,10 @@ class CSymgramSession : public CActive
         void HandleSentL( const TUint8* aP, TInt aLen );
         void BeginIapL();
         TInt SessionFileName( TFileName& aOut );
+        TInt SessionBackupName( TFileName& aOut );
+        TInt ReadSessionBlob( const TDesC& aFn, TDes8& aRaw );
+        TInt WriteSessionBlob( const TDesC& aFn, const TDesC8& aRaw );
+        TInt ApplySessionBlob( const TDesC8& aRaw );
         TInt LoadSession();
         void SaveSession();
         void DropSavedSession();
@@ -215,6 +219,12 @@ class CSymgramSession : public CActive
         TBuf8<192> iPwdUtf;
         TInt iSrpTries;
         TInt iFloodUntil;
+        TInt iDlgPage;
+        TInt iDlgOffDate;
+        TInt iDlgOffMsg;
+        TInt64 iDlgOffId;
+        TInt iDlgOffKind;
+        TInt64 iDlgOffHash;
 
         TInt64 iPeerId;
         TInt iPeerKind;

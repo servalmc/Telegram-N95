@@ -23,6 +23,7 @@ rls_string STRING_r_symgram_menu_save "Save"
 rls_string STRING_r_symgram_menu_refresh "Refresh"
 rls_string STRING_r_symgram_menu_contacts "Contacts"
 rls_string STRING_r_symgram_menu_settings "Settings"
+rls_string STRING_r_symgram_menu_update "Update"
 rls_string STRING_r_symgram_menu_logout "Log out"
 
 rls_string STRING_r_symgram_send_prompt "Message"
@@ -31,7 +32,7 @@ rls_string STRING_r_symgram_send_prompt "Message"
 rls_string STRING_r_symgram_menu_exit "Exit"
 
 //d:Body of the about note, shown under the name and version.
-rls_string STRING_r_symgram_about_text "Telegram client for Symbian 9.2"
+rls_string STRING_r_symgram_about_text "Telegram client for Symbian 9.2. github.com/servalmc/Telegram-N95"
 
 //d:Connection status shown in the header when there is no session.
 rls_string STRING_r_symgram_status_offline "Not connected"

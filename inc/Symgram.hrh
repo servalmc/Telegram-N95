@@ -14,7 +14,8 @@ enum TSymgramCommandIds
     ESymgramCmdPhoto,
     ESymgramCmdOpen,
     ESymgramCmdSave,
-    ESymgramCmdLogout
+        ESymgramCmdLogout,
+        ESymgramCmdUpdate
     };
 
 #endif // __SYMGRAM_HRH__

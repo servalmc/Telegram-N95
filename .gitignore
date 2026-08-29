@@ -27,10 +27,23 @@ abld.bat
 *.SIS
 *.SISX
 
-# Self-signing credentials and makekeys entropy pool
+# Self-signing credentials. The committed sis/selfsign.* pair is the upgrade
+# identity: every .sisx must be signed with it, or the phone treats the
+# package as a different app and the private session is lost.
 *.key
 *.cer
+!sis/selfsign.key
+!sis/selfsign.cer
 .rnd
+
+# Telegram API credentials. The committed header includes this file;
+# copy inc/SymgramApiLocal.h.example and paste values from my.telegram.org.
+inc/SymgramApiLocal.h
+
+# Session blobs and emulator logs must never be published.
+session.bin
+**/session.bin
+*.log
 
 # Local build output
 build/
