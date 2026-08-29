@@ -6,7 +6,7 @@ setlocal EnableDelayedExpansion
 cd /d "%~dp0.." || exit /b 1
 
 if not exist "sis\Symgram.sisx" (
-    echo sis\Symgram.sisx is missing — building...
+    echo sis\Symgram.sisx is missing, building...
     call "%~dp0release.bat" || exit /b 1
 )
 
@@ -34,7 +34,7 @@ if errorlevel 1 (
 echo Publishing GitHub release v!VER! ...
 gh release view "v!VER!" >nul 2>&1
 if not errorlevel 1 (
-    echo Release v!VER! already exists — replacing the .sisx.
+    echo Release v!VER! already exists, replacing the .sisx.
     gh release upload "v!VER!" "sis\Symgram.sisx" --clobber || exit /b 1
 ) else (
     gh release create "v!VER!" "sis\Symgram.sisx" --title "Symgram !VER!" --notes-file CHANGELOG.md --latest || exit /b 1
