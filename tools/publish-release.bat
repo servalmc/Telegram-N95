@@ -26,16 +26,12 @@ if not exist update mkdir update
 
 set "GH=gh"
 where gh >nul 2>&1
-if errorlevel 1 (
-    if exist "%ProgramFiles%\GitHub CLI\gh.exe" (
-        set "GH=%ProgramFiles%\GitHub CLI\gh.exe"
-    ) else if exist "%ProgramFiles(x86)%\GitHub CLI\gh.exe" (
-        set "GH=%ProgramFiles(x86)%\GitHub CLI\gh.exe"
-    ) else (
-        echo ERROR: GitHub CLI (gh) is not on PATH.
-        echo Install it and run: gh auth login
-        exit /b 1
-    )
+if errorlevel 1 set "GH=%ProgramFiles%\GitHub CLI\gh.exe"
+if not exist "%GH%" set "GH=%ProgramFiles(x86)%\GitHub CLI\gh.exe"
+if not exist "%GH%" (
+    echo ERROR: GitHub CLI (gh) is not on PATH.
+    echo Install it and run: gh auth login
+    exit /b 1
 )
 
 echo Publishing GitHub release v!VER! ...
