@@ -12,6 +12,11 @@
 #include <f32file.h>
 #include <DocumentHandler.h>
 #include <apmstd.h>
+#include <eikappui.h>
+#include <eikon.hrh>
+#include <eikbtgpc.h>
+#include <eikaufty.h>
+#include <avkon.rsg>
 #include <PathInfo.h>
 #include <w32std.h>
 #include <Symgram.rsg>
@@ -741,6 +746,7 @@ void CSymgramAppView::ConstructL( const TRect& aRect )
     SetFocusing( ETrue );
     SetFocus( ETrue );
     ActivateL();
+    SyncSoftkeys();
     }
 
 void CSymgramAppView::SetStatusL( const TDesC& aStatus )
@@ -1004,6 +1010,17 @@ TKeyResponse CSymgramAppView::OfferKeyEventL( const TKeyEvent& aKeyEvent,
                         ComposeL();
                         }
                     }
+                else if ( iPane == 3 )
+                    {
+                    if ( iSelected == 0 )
+                        {
+                        CheckUpdateL();
+                        }
+                    else
+                        {
+                        InstallUpdateL();
+                        }
+                    }
                 else if ( iPane == 2 )
                     {
                     if ( iSelected == 1 )
@@ -1018,7 +1035,7 @@ TKeyResponse CSymgramAppView::OfferKeyEventL( const TKeyEvent& aKeyEvent,
                         }
                     else if ( iSelected == 3 )
                         {
-                        CheckUpdateL();
+                        ShowUpdateL();
                         }
                     else if ( iSelected == 4 )
                         {
@@ -1040,21 +1057,8 @@ TKeyResponse CSymgramAppView::OfferKeyEventL( const TKeyEvent& aKeyEvent,
                 return EKeyWasConsumed;
             case EKeyBackspace:
             case EKeyDelete:
-                if ( iInChat )
+                if ( GoBack() )
                     {
-                    if ( iPick != 0 )
-                        {
-                        ClosePicker();
-                        }
-                    else
-                        {
-                        CloseChat();
-                        }
-                    return EKeyWasConsumed;
-                    }
-                if ( iPane != 0 )
-                    {
-                    ClosePane();
                     return EKeyWasConsumed;
                     }
                 break;
@@ -1286,7 +1290,11 @@ void CSymgramAppView::Draw( const TRect& /*aRect*/ ) const
         return;
         }
 
-    if ( iPane == 2 )
+    if ( iPane == 3 )
+        {
+        DrawUpdate( gc, list );
+        }
+    else if ( iPane == 2 )
         {
         DrawSettings( gc, list );
         }
@@ -1398,6 +1406,11 @@ void CSymgramAppView::DrawHeader( CWindowGc& aGc, const TRect& aRect ) const
         {
         _LIT( KCtc, "Контакты" );
         aGc.DrawText( KCtc, left, baseline, CGraphicsContext::ELeft );
+        }
+    else if ( iSignedIn && iPane == 3 )
+        {
+        _LIT( KUpd, "Обновление" );
+        aGc.DrawText( KUpd, left, baseline, CGraphicsContext::ELeft );
         }
     else if ( iSignedIn && iPane == 2 )
         {
@@ -1822,6 +1835,7 @@ void CSymgramAppView::QueryCountryL()
         }
     iPickingCountry = ETrue;
     DrawDeferred();
+    SyncSoftkeys();
     }
 
 TBool CSymgramAppView::ShowNextCommand() const
@@ -1859,6 +1873,57 @@ TBool CSymgramAppView::ShowLogoutCommand() const
     return iSignedIn;
     }
 
+TBool CSymgramAppView::CanGoBack() const
+    {
+    return iInChat || iPane != 0 || iPickingCountry || iPick != 0;
+    }
+
+void CSymgramAppView::SyncSoftkeys()
+    {
+    CEikButtonGroupContainer* cba = NULL;
+    if ( iEikonEnv && iEikonEnv->AppUiFactory() )
+        {
+        cba = iEikonEnv->AppUiFactory()->Cba();
+        }
+    if ( !cba )
+        {
+        return;
+        }
+    const TInt set = CanGoBack() ? R_AVKON_SOFTKEYS_OPTIONS_BACK
+                                 : R_AVKON_SOFTKEYS_OPTIONS_EXIT;
+    TRAP_IGNORE( cba->SetCommandSetL( set ) );
+    cba->DrawDeferred();
+    }
+
+TBool CSymgramAppView::GoBack()
+    {
+    if ( iInChat )
+        {
+        if ( iPick != 0 )
+            {
+            ClosePicker();
+            }
+        else
+            {
+            CloseChat();
+            }
+        return ETrue;
+        }
+    if ( iPickingCountry )
+        {
+        iPickingCountry = EFalse;
+        DrawDeferred();
+        SyncSoftkeys();
+        return ETrue;
+        }
+    if ( iPane != 0 )
+        {
+        ClosePane();
+        return ETrue;
+        }
+    return EFalse;
+    }
+
 void CSymgramAppView::NextL()
     {
     if ( iPickingCountry )
@@ -1866,6 +1931,7 @@ void CSymgramAppView::NextL()
         iPickingCountry = EFalse;
         iFocus = 1;
         DrawDeferred();
+        SyncSoftkeys();
         return;
         }
     if ( iSignedIn || !iSession || iSession->IsBusy() )
@@ -2049,6 +2115,7 @@ void CSymgramAppView::SessionLoggedOutL()
     _LIT( KOut, "Войдите снова" );
     SetStatusL( KOut );
     DrawDeferred();
+    SyncSoftkeys();
     }
 
 void CSymgramAppView::SessionAddChatL( const TSymgramChat& aChat )
@@ -2079,7 +2146,14 @@ void CSymgramAppView::SessionAddChatL( const TSymgramChat& aChat )
                     iChats[ i ].iName.Copy( KDlg );
                     }
                 }
-            iChats[ i ].iUnread = aChat.iUnread;
+            if ( iInChat && aChat.iId == iOpenId )
+                {
+                iChats[ i ].iUnread = 0;
+                }
+            else
+                {
+                iChats[ i ].iUnread = aChat.iUnread;
+                }
             iChats[ i ].iDate = aChat.iDate;
             if ( aChat.iHash != 0 )
                 {
@@ -2153,6 +2227,7 @@ void CSymgramAppView::SessionAddMessageL( const TSymgramMsg& aMsg )
     TSymgramMsg m = aMsg;
     m.iBmp = NULL;
     User::LeaveIfError( iMsgs.Append( m ) );
+    TrimMessages();
     }
 
 void CSymgramAppView::SessionMessagesReadyL( TInt64 aPeer )
@@ -2165,6 +2240,7 @@ void CSymgramAppView::SessionMessagesReadyL( TInt64 aPeer )
         {
         iStore->SaveMessages( aPeer, iMsgs );
         }
+    TrimMessages();
     iTopRow = 0;
     iThumbAt = 0;
     iMsgSel = iMsgs.Count() > 0 ? iMsgs.Count() - 1 : 0;
@@ -2203,6 +2279,11 @@ void CSymgramAppView::SessionSentL( TInt aId, TInt aDate )
         iStore->SaveMessages( iOpenId, iMsgs );
         }
     DrawDeferred();
+    }
+
+void CSymgramAppView::SessionPeerReadL( TInt64 aPeer )
+    {
+    MarkChatRead( aPeer );
     }
 
 void CSymgramAppView::SessionFileSavedL( const TDesC& aPath, TBool aOpen )
@@ -2268,17 +2349,20 @@ void CSymgramAppView::OpenChatAt( TInt aIndex )
         {
         return;
         }
-    const TSymgramChat& chat = iChats[ aIndex ];
+    TSymgramChat& chat = iChats[ aIndex ];
     iOpenId = chat.iId;
     iInChat = ETrue;
+    chat.iUnread = 0;
     ClearMessages();
     if ( iStore )
         {
         TRAP_IGNORE( iStore->LoadMessagesL( iOpenId, iMsgs ) );
         }
+    TrimMessages();
     iTopRow = 0;
     iMsgSel = iMsgs.Count() > 0 ? iMsgs.Count() - 1 : 0;
     DrawDeferred();
+    SyncSoftkeys();
     if ( iSession )
         {
         TRAP_IGNORE( iSession->GetHistoryL( chat.iId, chat.iPeerKind,
@@ -2329,10 +2413,20 @@ void CSymgramAppView::OpenContact()
 
 void CSymgramAppView::ClosePane()
     {
+    if ( iPane == 3 )
+        {
+        iPane = 2;
+        iSelected = 3;
+        iTopRow = 0;
+        DrawDeferred();
+        SyncSoftkeys();
+        return;
+        }
     iPane = 0;
     iSelected = 0;
     iTopRow = 0;
     DrawDeferred();
+    SyncSoftkeys();
     }
 
 void CSymgramAppView::CloseChat()
@@ -2342,6 +2436,7 @@ void CSymgramAppView::CloseChat()
     iOpenId = 0;
     ClearMessages();
     DrawDeferred();
+    SyncSoftkeys();
     }
 
 void CSymgramAppView::DrawChat( CWindowGc& aGc, const TRect& aRect ) const
@@ -2474,10 +2569,55 @@ void CSymgramAppView::DrawTabs( CWindowGc& aGc, const TRect& aRect ) const
         }
     }
 
+void CSymgramAppView::DrawSettingRow( CWindowGc& aGc, const TRect& aRow,
+                                      TBool aOn, const TDesC& aTitle,
+                                      const TDesC& aDetail ) const
+    {
+    aGc.SetPenStyle( CGraphicsContext::ENullPen );
+    aGc.SetBrushStyle( CGraphicsContext::ESolidBrush );
+    aGc.SetBrushColor( aOn ? Highlight() : Paper() );
+    aGc.DrawRect( aRow );
+    if ( !iNameFont )
+        {
+        return;
+        }
+    aGc.UseFont( iNameFont );
+    aGc.SetPenStyle( CGraphicsContext::ESolidPen );
+    aGc.SetPenColor( Ink() );
+    aGc.SetBrushStyle( CGraphicsContext::ENullBrush );
+    TRect nameBox( aRow.iTl.iX + 8, aRow.iTl.iY + 4,
+                   aRow.iBr.iX - 8, aRow.iTl.iY + 4 + iNameFont->HeightInPixels() );
+    aGc.DrawText( aTitle, nameBox, iNameFont->AscentInPixels(),
+                  CGraphicsContext::ELeft );
+    aGc.DiscardFont();
+    if ( aDetail.Length() == 0 || !iTextFont )
+        {
+        return;
+        }
+    aGc.UseFont( iTextFont );
+    aGc.SetPenColor( Muted() );
+    TRect d( aRow.iTl.iX + 8, nameBox.iBr.iY + 2,
+             aRow.iBr.iX - 8, aRow.iBr.iY - 2 );
+    TBuf<40> clipped;
+    clipped.Copy( aDetail.Left( clipped.MaxLength() ) );
+    aGc.DrawText( clipped, d, iTextFont->AscentInPixels(),
+                  CGraphicsContext::ELeft );
+    aGc.DiscardFont();
+    }
+
 void CSymgramAppView::DrawSettings( CWindowGc& aGc, const TRect& aRect ) const
     {
     TBuf<40> phone;
     PhoneText( phone );
+    TBuf<16> upd;
+    if ( iUpdate && iUpdate->RemoteTag().Length() > 0 )
+        {
+        upd.Copy( iUpdate->RemoteTag() );
+        }
+    else
+        {
+        upd.Copy( KSymgramVersionName );
+        }
     _LIT( KAcc, "Аккаунт" );
     _LIT( KOut, "Выйти" );
     _LIT( KCache, "Очистить кэш" );
@@ -2489,79 +2629,69 @@ void CSymgramAppView::DrawSettings( CWindowGc& aGc, const TRect& aRect ) const
         {
         TRect row( aRect.iTl.iX, aRect.iTl.iY + i * rowH,
                    aRect.iBr.iX, aRect.iTl.iY + ( i + 1 ) * rowH );
-        aGc.SetPenStyle( CGraphicsContext::ENullPen );
-        aGc.SetBrushStyle( CGraphicsContext::ESolidBrush );
-        aGc.SetBrushColor( i == iSelected ? Highlight() : Paper() );
-        aGc.DrawRect( row );
-        if ( !iNameFont )
-            {
-            continue;
-            }
-        aGc.UseFont( iNameFont );
-        aGc.SetPenStyle( CGraphicsContext::ESolidPen );
-        aGc.SetPenColor( Ink() );
-        aGc.SetBrushStyle( CGraphicsContext::ENullBrush );
-        TRect nameBox( row.iTl.iX + 8, row.iTl.iY + 4,
-                       row.iBr.iX - 8, row.iTl.iY + 4 + iNameFont->HeightInPixels() );
         if ( i == 0 )
             {
-            aGc.DrawText( KAcc, nameBox, iNameFont->AscentInPixels(),
-                          CGraphicsContext::ELeft );
+            DrawSettingRow( aGc, row, i == iSelected, KAcc, phone );
             }
         else if ( i == 1 )
             {
-            aGc.DrawText( KOut, nameBox, iNameFont->AscentInPixels(),
-                          CGraphicsContext::ELeft );
+            DrawSettingRow( aGc, row, i == iSelected, KOut, KNullDesC );
             }
         else if ( i == 2 )
             {
-            aGc.DrawText( KCache, nameBox, iNameFont->AscentInPixels(),
-                          CGraphicsContext::ELeft );
+            DrawSettingRow( aGc, row, i == iSelected, KCache, KNullDesC );
             }
         else if ( i == 3 )
             {
-            aGc.DrawText( KUpd, nameBox, iNameFont->AscentInPixels(),
-                          CGraphicsContext::ELeft );
+            DrawSettingRow( aGc, row, i == iSelected, KUpd, upd );
             }
         else
             {
-            aGc.DrawText( KAbout, nameBox, iNameFont->AscentInPixels(),
-                          CGraphicsContext::ELeft );
-            }
-        aGc.DiscardFont();
-        if ( i == 0 && iTextFont && phone.Length() > 0 )
-            {
-            aGc.UseFont( iTextFont );
-            aGc.SetPenColor( Muted() );
-            TRect d( row.iTl.iX + 8,
-                     nameBox.iBr.iY + 2,
-                     row.iBr.iX - 8, row.iBr.iY - 2 );
-            aGc.DrawText( phone, d, iTextFont->AscentInPixels(),
-                          CGraphicsContext::ELeft );
-            aGc.DiscardFont();
-            }
-        else if ( i == 3 && iTextFont )
-            {
-            aGc.UseFont( iTextFont );
-            aGc.SetPenColor( Muted() );
-            TRect d( row.iTl.iX + 8,
-                     nameBox.iBr.iY + 2,
-                     row.iBr.iX - 8, row.iBr.iY - 2 );
-            if ( iUpdate && iUpdate->RemoteTag().Length() > 0 )
-                {
-                aGc.DrawText( iUpdate->RemoteTag(), d,
-                              iTextFont->AscentInPixels(),
-                              CGraphicsContext::ELeft );
-                }
-            else
-                {
-                aGc.DrawText( KSymgramVersionName, d,
-                              iTextFont->AscentInPixels(),
-                              CGraphicsContext::ELeft );
-                }
-            aGc.DiscardFont();
+            DrawSettingRow( aGc, row, i == iSelected, KAbout, KNullDesC );
             }
         }
+    }
+
+void CSymgramAppView::DrawUpdate( CWindowGc& aGc, const TRect& aRect ) const
+    {
+    TBuf<40> checkDetail;
+    checkDetail.Copy( KSymgramVersionName );
+    if ( iUpdate && iUpdate->RemoteTag().Length() > 0 )
+        {
+        checkDetail.Copy( iUpdate->RemoteTag() );
+        }
+    TBuf<40> instDetail;
+    _LIT( KNone, "Нет файла на диске" );
+    instDetail.Copy( KNone );
+    if ( iUpdate && iUpdate->CanInstall() )
+        {
+        TParse parse;
+        parse.Set( iUpdate->PackagePath(), NULL, NULL );
+        instDetail.Copy( parse.NameAndExt().Left( instDetail.MaxLength() ) );
+        }
+    _LIT( KCheck, "Проверить" );
+    _LIT( KInst, "Установить" );
+    const TInt rowH = RowHeight();
+    TRect r0( aRect.iTl.iX, aRect.iTl.iY,
+              aRect.iBr.iX, aRect.iTl.iY + rowH );
+    TRect r1( aRect.iTl.iX, aRect.iTl.iY + rowH,
+              aRect.iBr.iX, aRect.iTl.iY + 2 * rowH );
+    DrawSettingRow( aGc, r0, iSelected == 0, KCheck, checkDetail );
+    DrawSettingRow( aGc, r1, iSelected == 1, KInst, instDetail );
+    if ( !iTextFont )
+        {
+        return;
+        }
+    aGc.UseFont( iTextFont );
+    aGc.SetPenStyle( CGraphicsContext::ESolidPen );
+    aGc.SetPenColor( Muted() );
+    aGc.SetBrushStyle( CGraphicsContext::ENullBrush );
+    _LIT( KHint, "Скачайте .sisx с GitHub в C:\\Data\\Symgram или на карту." );
+    TRect hint( aRect.iTl.iX + 6, aRect.iBr.iY - iTextFont->HeightInPixels() - 6,
+                aRect.iBr.iX - 6, aRect.iBr.iY - 2 );
+    aGc.DrawText( KHint, hint, iTextFont->AscentInPixels(),
+                  CGraphicsContext::ELeft );
+    aGc.DiscardFont();
     }
 
 void CSymgramAppView::DrawContactRow( CWindowGc& aGc, const TRect& aRect,
@@ -2653,6 +2783,32 @@ void CSymgramAppView::ClearMessages()
     iThumbAt = 0;
     }
 
+void CSymgramAppView::TrimMessages()
+    {
+    const TInt keep = 50;
+    while ( iMsgs.Count() > keep )
+        {
+        delete iMsgs[ 0 ].iBmp;
+        iMsgs[ 0 ].iBmp = NULL;
+        iMsgs.Remove( 0 );
+        }
+    }
+
+void CSymgramAppView::MarkChatRead( TInt64 aPeer )
+    {
+    const TInt idx = FindChat( aPeer );
+    if ( idx < 0 )
+        {
+        return;
+        }
+    iChats[ idx ].iUnread = 0;
+    if ( iStore )
+        {
+        iStore->SaveChats( iChats );
+        }
+    DrawDeferred();
+    }
+
 TInt CSymgramAppView::FindChat( TInt64 aId ) const
     {
     TInt i = 0;
@@ -2714,6 +2870,10 @@ TInt CSymgramAppView::CurrentCount() const
     if ( iPane == 1 )
         {
         return iContacts.Count();
+        }
+    if ( iPane == 3 )
+        {
+        return 2;
         }
     if ( iPane == 2 )
         {
@@ -2786,6 +2946,7 @@ void CSymgramAppView::ShowContactsL()
     iSelected = 0;
     iTopRow = 0;
     DrawDeferred();
+    SyncSoftkeys();
     }
 
 void CSymgramAppView::ShowSettingsL()
@@ -2802,6 +2963,7 @@ void CSymgramAppView::ShowSettingsL()
         iUpdate->PeekLocal();
         }
     DrawDeferred();
+    SyncSoftkeys();
     }
 
 void CSymgramAppView::ClosePicker()
@@ -2809,6 +2971,7 @@ void CSymgramAppView::ClosePicker()
     iPick = 0;
     iPickSel = 0;
     DrawDeferred();
+    SyncSoftkeys();
     }
 
 void CSymgramAppView::ComposeL()
@@ -2871,6 +3034,7 @@ void CSymgramAppView::PickEmojiL()
     iPick = 1;
     iPickSel = 0;
     DrawDeferred();
+    SyncSoftkeys();
     }
 
 void CSymgramAppView::SendPickedEmojiL()
@@ -2969,6 +3133,7 @@ void CSymgramAppView::PickPhotoL()
     iPick = 2;
     iPickSel = 0;
     DrawDeferred();
+    SyncSoftkeys();
     }
 
 void CSymgramAppView::SendPickedPhotoL()
@@ -3291,20 +3456,104 @@ void CSymgramAppView::LogoutAskL()
     iSession->LogoutL();
     }
 
+void CSymgramAppView::ShowUpdateL()
+    {
+    if ( !iSignedIn || iInChat )
+        {
+        return;
+        }
+    iPane = 3;
+    iSelected = 0;
+    iTopRow = 0;
+    if ( iUpdate )
+        {
+        iUpdate->PeekLocal();
+        if ( iUpdate->PackageNewer() )
+            {
+            _LIT( KNew, "На диске есть пакет" );
+            SetStatusL( KNew );
+            }
+        else if ( iUpdate->CanInstall() )
+            {
+            _LIT( KHave, "Пакет на диске" );
+            SetStatusL( KHave );
+            }
+        else
+            {
+            _LIT( KAsk, "Проверьте GitHub" );
+            SetStatusL( KAsk );
+            }
+        }
+    DrawDeferred();
+    SyncSoftkeys();
+    }
+
 void CSymgramAppView::CheckUpdateL()
+    {
+    if ( iPane != 3 )
+        {
+        ShowUpdateL();
+        }
+    if ( !iUpdate )
+        {
+        return;
+        }
+    TRAPD( err, iUpdate->StartL() );
+    if ( err != KErrNone )
+        {
+        TBuf<32> text;
+        _LIT( KFail, "Проверка " );
+        text.Copy( KFail );
+        text.AppendNum( err );
+        SetStatusL( text );
+        }
+    }
+
+void CSymgramAppView::InstallUpdateL()
     {
     if ( !iUpdate )
         {
         return;
         }
     iUpdate->PeekLocal();
-    if ( iUpdate->PackageNewer() ||
-         ( iUpdate->NetDone() && iUpdate->CanInstall() ) )
+    if ( !iUpdate->CanInstall() )
         {
-        OpenSystemL( iUpdate->PackagePath() );
+        _LIT( KNone, "Нет пакета на диске" );
+        SetStatusL( KNone );
+        DrawDeferred();
         return;
         }
-    iUpdate->StartL();
+    CAknQueryDialog* dlg = CAknQueryDialog::NewL();
+    if ( dlg->ExecuteLD( R_SYMGRAM_UPDATE_QUERY ) != EAknSoftkeyYes )
+        {
+        return;
+        }
+    // Keep the handler alive until Exit: destroying it while SWInst
+    // starts panics the process. Exit lets the installer replace us.
+    CDocumentHandler* doc = CDocumentHandler::NewL();
+    TDataType type;
+    TInt err = KErrNone;
+    TRAPD( leave, err = doc->OpenFileL( iUpdate->PackagePath(), type ) );
+    if ( leave != KErrNone )
+        {
+        err = leave;
+        }
+    if ( err != KErrNone && err != KUserCancel )
+        {
+        delete doc;
+        TBuf<40> text;
+        _LIT( KFail, "Нечем открыть " );
+        text.Copy( KFail );
+        text.AppendNum( err );
+        SetStatusL( text );
+        return;
+        }
+    if ( err == KUserCancel )
+        {
+        delete doc;
+        return;
+        }
+    iEikonEnv->EikAppUi()->HandleCommandL( EEikCmdExit );
     }
 
 void CSymgramAppView::UpdateStatusL( const TDesC& aText )

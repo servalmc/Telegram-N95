@@ -28,6 +28,7 @@ rls_string STRING_r_symgram_menu_refresh "Обновить"
 rls_string STRING_r_symgram_menu_contacts "Контакты"
 rls_string STRING_r_symgram_menu_settings "Настройки"
 rls_string STRING_r_symgram_menu_update "Обновление"
+rls_string STRING_r_symgram_update_confirm "Поставить пакет поверх текущей версии?"
 rls_string STRING_r_symgram_menu_logout "Выйти"
 
 rls_string STRING_r_symgram_send_prompt "Сообщение"

@@ -62,6 +62,9 @@ namespace
     const TUint32 KGetHistory = 0x4423e6c5u;
     const TUint32 KSendMessage = 0x1cc20387u;
     const TUint32 KGetFile = 0xbe5335beu;
+    const TUint32 KExportAuth = 0xe5bfffcdu;
+    const TUint32 KExportedAuth = 0xb434e2b8u;
+    const TUint32 KImportAuth = 0xa57a7dadu;
     const TUint32 KSaveFilePart = 0xb304a621u;
     const TUint32 KSendMedia = 0x7547c966u;
     const TUint32 KInputFile = 0xf52ff27fu;
@@ -110,7 +113,11 @@ namespace
     const TInt KSrpBitBudget = 12;
     const TInt KMaxIn = 65536;
     const TInt KMaxUnzip = 131072;
-    const TInt KHistLimit = 8;
+    const TInt KHistLimit = 50;
+    const TUint32 KReadHistory = 0x0e306d3au;
+    const TUint32 KChanReadHistory = 0xcc104937u;
+    const TUint32 KInputChannel = 0xf35aec28u;
+    const TUint32 KAffectedMsgs = 0x84d19185u;
 
     struct TDhWork
         {
@@ -701,6 +708,33 @@ namespace
             }
         const TUint32 flags = GetU32( aP + aO );
         aO += 4;
+        // layer 158 draftMessage#fd8e711f: reply_to_msg_id, text, entities, date
+        if ( c == 0xfd8e711fu )
+            {
+            if ( ( flags & 1 ) != 0 )
+                {
+                if ( Need( aO, aN, 4 ) != KErrNone )
+                    {
+                    return KErrCorrupt;
+                    }
+                aO += 4;
+                }
+            if ( SkipBytes( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            if ( ( flags & 8 ) != 0 &&
+                 SkipEntityVec( aP, aN, aO ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            if ( Need( aO, aN, 4 ) != KErrNone )
+                {
+                return KErrCorrupt;
+                }
+            aO += 4;
+            return KErrNone;
+            }
         if ( c == 0x1b0c841au )
             {
             if ( ( flags & 1 ) != 0 )
@@ -1240,7 +1274,8 @@ namespace
             return EFalse;
             }
         const TUint32 c = GetU32( aP + aO );
-        if ( c == 0xd3bc4c2au )
+        // userEmpty: layer 158 is d3bc4b7a; d3bc4c2a is a neighbour.
+        if ( c == 0xd3bc4c2au || c == 0xd3bc4b7au )
             {
             if ( Need( aO, aN, 12 ) != KErrNone )
                 {
@@ -1252,19 +1287,25 @@ namespace
             aOut.iDeleted = ETrue;
             return ETrue;
             }
-        if ( c != 0xabb5f120u && c != 0x8f97c628u )
+        // 3ff6ecb0 is layer 158 (flags only). Later users add flags2.
+        const TBool hasFlags2 = ( c == 0xabb5f120u || c == 0x8f97c628u );
+        if ( c != 0x3ff6ecb0u && !hasFlags2 )
             {
             return EFalse;
             }
-        if ( Need( aO, aN, 16 ) != KErrNone )
+        if ( Need( aO, aN, hasFlags2 ? 16 : 12 ) != KErrNone )
             {
             return EFalse;
             }
         aO += 4;
         const TUint32 flags = GetU32( aP + aO );
         aO += 4;
-        const TUint32 flags2 = GetU32( aP + aO );
-        aO += 4;
+        TUint32 flags2 = 0;
+        if ( hasFlags2 )
+            {
+            flags2 = GetU32( aP + aO );
+            aO += 4;
+            }
         aOut.iId = (TInt64)GetU64( aP + aO );
         aO += 8;
         aOut.iSelf = ( flags & ( 1u << 10 ) ) != 0;
@@ -1335,7 +1376,8 @@ namespace
 
     TBool IsUserCtor( TUint32 aC )
         {
-        return aC == 0xabb5f120u || aC == 0x8f97c628u || aC == 0xd3bc4c2au;
+        return aC == 0x3ff6ecb0u || aC == 0xabb5f120u || aC == 0x8f97c628u ||
+               aC == 0xd3bc4c2au || aC == 0xd3bc4b7au;
         }
 
     void SkipToNextPeer( const TUint8* aP, TInt aN, TInt& aO )
@@ -1482,23 +1524,21 @@ namespace
 
     TBool NameFits( TInt aDlgKind, TInt aNameKind )
         {
-        if ( aDlgKind == 0 )
-            {
-            return aNameKind >= 2;
-            }
         if ( aDlgKind == 1 )
             {
             return aNameKind == 1;
             }
-        if ( aDlgKind == 2 )
+        if ( aDlgKind == 0 )
             {
-            return aNameKind == 2;
+            return aNameKind >= 2;
             }
-        if ( aDlgKind == 3 )
+        // peerChat / peerChannel must accept basic group, broadcast
+        // and megagroup: a migrated group keeps the old peer kind.
+        if ( aDlgKind >= 2 )
             {
-            return aNameKind == 3 || aNameKind == 4;
+            return aNameKind >= 2;
             }
-        return aNameKind == aDlgKind || aNameKind == 3;
+        return aNameKind == aDlgKind;
         }
 
     TInt SkipPeer( const TUint8* aP, TInt aN, TInt& aO, TInt& aKind, TInt64& aId )
@@ -1579,7 +1619,10 @@ namespace
 
     TBool IsDialogCtor( TUint32 aC )
         {
-        return aC == 0xd58a08c6u || aC == 0xa8edd0ebu || aC == 0x71bd134cu;
+        // a8edd0f5 is layer 158 (unread_reactions_count).
+        // a8edd0eb / d58a08c6 are older and newer neighbours.
+        return aC == 0xd58a08c6u || aC == 0xa8edd0ebu ||
+               aC == 0xa8edd0f5u || aC == 0x71bd134cu;
         }
 
     TBool IsPeerCtor( TUint32 aC )
@@ -1600,7 +1643,8 @@ namespace
                 {
                 return KErrNone;
                 }
-            if ( ( c == 0xd58a08c6u || c == 0xa8edd0ebu ) &&
+            if ( ( c == 0xd58a08c6u || c == 0xa8edd0ebu ||
+                   c == 0xa8edd0f5u ) &&
                  IsPeerCtor( GetU32( aP + aO + 8 ) ) )
                 {
                 return KErrNone;
@@ -3033,10 +3077,19 @@ CSymgramSession::CSymgramSession( MSymgramSessionObserver& aObserver )
       iPeerId( 0 ),
       iPeerKind( 0 ),
       iPeerHash( 0 ),
+      iNeedRead( EFalse ),
+      iReadMaxId( 0 ),
       iFileMsgId( 0 ),
       iFileId( 0 ),
       iFileHash( 0 ),
       iFilePhoto( EFalse ),
+      iHomeDc( 0 ),
+      iHomeAuthKeyId( 0 ),
+      iHomeSalt( 0 ),
+      iFileDc( 0 ),
+      iExportId( 0 ),
+      iExportBytes( NULL ),
+      iRestoreQuiet( EFalse ),
       iPendRpc( ERpcNone ),
       iSaveFull( EFalse ),
       iSaveOpen( EFalse ),
@@ -3079,6 +3132,7 @@ CSymgramSession::~CSymgramSession()
     delete iPbkdfIdle;
     delete iIn;
     delete iUpload;
+    ClearFileHop();
     ClearSave();
     CloseSocket();
     iConn.Close();
@@ -3158,6 +3212,8 @@ void CSymgramSession::GetHistoryL( TInt64 aId, TInt aKind, TInt64 aHash )
     iPeerId = aId;
     iPeerKind = aKind;
     iPeerHash = aHash;
+    iNeedRead = ETrue;
+    iReadMaxId = 0x7fffffff;
     if ( iBusy || iPhase < 3 )
         {
         iPendRpc = ERpcHistory;
@@ -3426,6 +3482,51 @@ void CSymgramSession::SendGetHistoryNowL()
     SendRpcL( wrapped );
     }
 
+void CSymgramSession::SendReadHistoryNowL()
+    {
+    TBuf8<80> query;
+    if ( iPeerKind == 3 || iPeerKind == 4 )
+        {
+        PutU32( query, KChanReadHistory );
+        PutU32( query, KInputChannel );
+        PutU64( query, (TUint64)iPeerId );
+        PutU64( query, (TUint64)iPeerHash );
+        PutU32( query, (TUint32)iReadMaxId );
+        }
+    else
+        {
+        PutU32( query, KReadHistory );
+        PutInputPeer( query, iPeerKind, iPeerId, iPeerHash );
+        PutU32( query, (TUint32)iReadMaxId );
+        }
+    TBuf8<448> wrapped;
+    WrapInitL( query, wrapped );
+    iRpc = ERpcRead;
+    SendRpcL( wrapped );
+    }
+
+void CSymgramSession::QueueReadIfNeeded()
+    {
+    if ( !iNeedRead )
+        {
+        return;
+        }
+    iNeedRead = EFalse;
+    if ( iPendRpc == ERpcNone )
+        {
+        iPendRpc = ERpcRead;
+        }
+    }
+
+void CSymgramSession::FinishHistoryL()
+    {
+    iBusy = EFalse;
+    iRpc = ERpcNone;
+    iState = EIdle;
+    QueueReadIfNeeded();
+    FlushPendingL();
+    }
+
 void CSymgramSession::SendTextNowL()
     {
     TBuf8<512> query;
@@ -3471,11 +3572,19 @@ void CSymgramSession::SendGetFileNowL()
 
 void CSymgramSession::FlushPendingL()
     {
+    if ( iPendRpc == ERpcNone )
+        {
+        QueueReadIfNeeded();
+        }
     const TRpc next = iPendRpc;
     iPendRpc = ERpcNone;
     if ( next == ERpcHistory )
         {
         SendGetHistoryNowL();
+        }
+    else if ( next == ERpcRead )
+        {
+        SendReadHistoryNowL();
         }
     else if ( next == ERpcSend )
         {
@@ -3496,6 +3605,145 @@ TBool CSymgramSession::IsFileMigrate( const TDesC8& aMsg ) const
     _LIT8( KMig, "FILE_MIGRATE_" );
     return aMsg.Length() > KMig().Length() &&
            aMsg.Left( KMig().Length() ) == KMig;
+    }
+
+TInt CSymgramSession::FileMigrateDc( const TDesC8& aMsg ) const
+    {
+    _LIT8( KMig, "FILE_MIGRATE_" );
+    if ( !IsFileMigrate( aMsg ) )
+        {
+        return 0;
+        }
+    TInt dc = 0;
+    TLex8 lex( aMsg.Mid( KMig().Length() ) );
+    if ( lex.Val( dc ) != KErrNone || dc < 1 || dc > KDcMax )
+        {
+        return 0;
+        }
+    return dc;
+    }
+
+void CSymgramSession::ClearFileHop()
+    {
+    iHomeDc = 0;
+    iHomeAuthKey.Zero();
+    iHomeAuthKeyId = 0;
+    iHomeSalt = 0;
+    iFileDc = 0;
+    iExportId = 0;
+    delete iExportBytes;
+    iExportBytes = NULL;
+    }
+
+void CSymgramSession::BeginFileHopL( TInt aDc )
+    {
+    if ( aDc < 1 || aDc > KDcMax || aDc == iDcId )
+        {
+        User::Leave( KErrArgument );
+        }
+    if ( iHomeDc == 0 )
+        {
+        iHomeDc = iDcId;
+        iHomeAuthKey.Copy( iAuthKey );
+        iHomeAuthKeyId = iAuthKeyId;
+        iHomeSalt = iSalt;
+        }
+    iFileDc = aDc;
+    SendExportAuthL();
+    }
+
+void CSymgramSession::SendExportAuthL()
+    {
+    TBuf8<16> query;
+    PutU32( query, KExportAuth );
+    PutU32( query, (TUint32)iFileDc );
+    TBuf8<384> wrapped;
+    WrapInitL( query, wrapped );
+    iRpc = ERpcExportAuth;
+    _LIT( KHop, "Файл: другой сервер..." );
+    iObserver.SessionStatusL( KHop );
+    SendRpcL( wrapped );
+    }
+
+void CSymgramSession::HandleExportAuthL( const TUint8* aP, TInt aLen )
+    {
+    if ( aLen < 16 || GetU32( aP ) != KExportedAuth )
+        {
+        RestoreHomeDcL();
+        _LIT( KNo, "Файл недоступен" );
+        iObserver.SessionErrorL( KNo );
+        return;
+        }
+    iExportId = (TInt64)GetU64( aP + 4 );
+    const TUint8* data = NULL;
+    TInt len = 0;
+    if ( TlReadBytes( aP + 12, aLen - 12, data, len ) < 0 || len < 1 )
+        {
+        RestoreHomeDcL();
+        _LIT( KNo, "Файл недоступен" );
+        iObserver.SessionErrorL( KNo );
+        return;
+        }
+    delete iExportBytes;
+    iExportBytes = NULL;
+    iExportBytes = HBufC8::NewL( len );
+    iExportBytes->Des().Copy( data, len );
+    iDcId = iFileDc;
+    iPhase = 0;
+    iAuthKey.Zero();
+    iAuthKeyId = 0;
+    iSalt = 0;
+    iSentAbridged = EFalse;
+    iLastRpc.Zero();
+    iResumeTries = 0;
+    _LIT( KDc, "Файл: DC " );
+    TBuf<24> text;
+    text.Copy( KDc );
+    text.AppendNum( iFileDc );
+    iObserver.SessionStatusL( text );
+    ResumeConnectL();
+    }
+
+void CSymgramSession::SendImportAuthL()
+    {
+    if ( !iExportBytes )
+        {
+        RestoreHomeDcL();
+        return;
+        }
+    TBuf8<768> query;
+    PutU32( query, KImportAuth );
+    PutU64( query, (TUint64)iExportId );
+    TlAppendBytes( query, iExportBytes->Ptr(), iExportBytes->Length() );
+    TBuf8<1024> wrapped;
+    WrapInitL( query, wrapped );
+    iRpc = ERpcImportAuth;
+    SendRpcL( wrapped );
+    }
+
+void CSymgramSession::RestoreHomeDcL()
+    {
+    if ( iHomeDc == 0 || iHomeAuthKeyId == 0 )
+        {
+        ClearFileHop();
+        return;
+        }
+    const TInt home = iHomeDc;
+    TBuf8<256> key;
+    key.Copy( iHomeAuthKey );
+    const TUint64 keyId = iHomeAuthKeyId;
+    const TUint64 salt = iHomeSalt;
+    ClearFileHop();
+    iDcId = home;
+    iAuthKey.Copy( key );
+    iAuthKeyId = keyId;
+    iSalt = salt;
+    iPhase = 3;
+    iSentAbridged = EFalse;
+    iLastRpc.Zero();
+    iResumeTries = 0;
+    iRestoreQuiet = ETrue;
+    ResumeConnectL();
     }
 
 TInt CSymgramSession::SessionFileName( TFileName& aOut )
@@ -3631,7 +3879,7 @@ TInt CSymgramSession::LoadSession()
 
 void CSymgramSession::SaveSession()
     {
-    if ( iAuthKey.Length() != 256 || iAuthKeyId == 0 )
+    if ( iHomeDc != 0 || iAuthKey.Length() != 256 || iAuthKeyId == 0 )
         {
         return;
         }
@@ -3852,22 +4100,56 @@ void CSymgramSession::RpcFailL( const TDesC8& aMsg )
         }
     if ( ( iRpc == ERpcFile || iRpc == ERpcSaveFile ) && IsFileMigrate( aMsg ) )
         {
-        ClearSave();
+        const TInt dc = FileMigrateDc( aMsg );
+        if ( dc != 0 && dc != iDcId && iFileDc == 0 )
+            {
+            TRAPD( err, BeginFileHopL( dc ) );
+            if ( err == KErrNone )
+                {
+                return;
+                }
+            }
         iBusy = EFalse;
         iRpc = ERpcNone;
         iState = EIdle;
         _LIT( KOn, "Файл на другом сервере" );
         iObserver.SessionStatusL( KOn );
-        FlushPendingL();
+        if ( iHomeDc != 0 )
+            {
+            RestoreHomeDcL();
+            }
+        else
+            {
+            FlushPendingL();
+            }
         return;
         }
     if ( IsDeadAuth( aMsg ) )
         {
+        if ( iHomeDc != 0 )
+            {
+            iBusy = EFalse;
+            iRpc = ERpcNone;
+            iState = EIdle;
+            RestoreHomeDcL();
+            _LIT( KNo, "Файл недоступен" );
+            iObserver.SessionErrorL( KNo );
+            return;
+            }
         DropSavedSession();
         iBusy = EFalse;
         iState = EIdle;
         iAuthed = EFalse;
         iObserver.SessionLoggedOutL();
+        }
+    if ( iRpc == ERpcRead )
+        {
+        iNeedRead = EFalse;
+        iBusy = EFalse;
+        iState = EIdle;
+        iRpc = ERpcNone;
+        FlushPendingL();
+        return;
         }
     TBuf<64> text;
     ToUnicode( aMsg, text );
@@ -4514,8 +4796,21 @@ void CSymgramSession::RunL()
             else if ( iPhase >= 3 && iAuthKeyId != 0 )
                 {
                 iResume = EFalse;
-                iObserver.SessionSignedInL();
-                SendGetDialogsL();
+                if ( iRestoreQuiet )
+                    {
+                    iRestoreQuiet = EFalse;
+                    iBusy = EFalse;
+                    iRpc = ERpcNone;
+                    iState = EIdle;
+                    _LIT( KOn, "В сети" );
+                    iObserver.SessionStatusL( KOn );
+                    FlushPendingL();
+                    }
+                else
+                    {
+                    iObserver.SessionSignedInL();
+                    SendGetDialogsL();
+                    }
                 }
             else
                 {
@@ -5284,6 +5579,12 @@ void CSymgramSession::HandleDhGenL( const TUint8* aBody, TInt aLen )
         return;
         }
 
+    if ( iHomeDc != 0 && iExportBytes )
+        {
+        SendImportAuthL();
+        return;
+        }
+
     SendSendCodeL();
     }
 
@@ -5566,7 +5867,9 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
         const TInt topMsg = GetI32( aP + o );
         o += 12;
         const TInt unread = (TInt)GetU32( aP + o );
-        o += 12;
+        // a8edd0eb has unread + mentions (8). Layer 158 a8edd0f5 and
+        // later d58a08c6 also have unread_reactions_count (12).
+        o += ( c == 0xa8edd0ebu ) ? 8 : 12;
         if ( SkipNotify( aP, aLen, o ) != KErrNone )
             {
             if ( FindNextDialog( aP, aLen, o ) != KErrNone )
@@ -5663,10 +5966,10 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
         o = afterDialogs;
         }
 
-    TPeerName names[ 48 ];
+    TPeerName names[ 80 ];
     TInt nnames = 0;
     TInt hunt = 0;
-    while ( hunt + 20 <= aLen && nnames < 48 )
+    while ( hunt + 20 <= aLen && nnames < 80 )
         {
         const TUint32 c = GetU32( aP + hunt );
         if ( IsChatCtor( c ) )
@@ -5723,6 +6026,28 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
                 break;
                 }
             }
+        if ( chat.iName == KDlg )
+            {
+            for ( k = 0; k < nnames; k++ )
+                {
+                if ( names[ k ].iId == dlg[ i ].iId &&
+                     names[ k ].iName.Length() > 0 &&
+                     ( dlg[ i ].iKind != 1 || names[ k ].iKind == 1 ) )
+                    {
+                    chat.iName.Copy( names[ k ].iName );
+                    if ( names[ k ].iHash != 0 )
+                        {
+                        chat.iHash = names[ k ].iHash;
+                        dlg[ i ].iHash = names[ k ].iHash;
+                        }
+                    if ( names[ k ].iKind != 0 )
+                        {
+                        chat.iPeerKind = names[ k ].iKind;
+                        }
+                    break;
+                    }
+                }
+            }
         TInt m = 0;
         for ( m = 0; m < nmsgs; m++ )
             {
@@ -5741,17 +6066,22 @@ void CSymgramSession::HandleDialogsL( const TUint8* aP, TInt aLen )
         }
     SaveSession();
     iObserver.SessionChatsReadyL();
-    if ( root == KDialogsSlice && got > 0 && iDlgPage < 2 )
+    if ( root == KDialogsSlice && got > 0 && iDlgPage < 5 )
         {
-        iDlgOffId = dlg[ got - 1 ].iId;
-        iDlgOffKind = dlg[ got - 1 ].iKind;
-        iDlgOffMsg = dlg[ got - 1 ].iTopMsg;
-        iDlgOffHash = dlg[ got - 1 ].iHash;
+        TInt off = got - 1;
+        while ( off > 0 && dlg[ off ].iHash == 0 && dlg[ off ].iKind == 1 )
+            {
+            off--;
+            }
+        iDlgOffId = dlg[ off ].iId;
+        iDlgOffKind = dlg[ off ].iKind;
+        iDlgOffMsg = dlg[ off ].iTopMsg;
+        iDlgOffHash = dlg[ off ].iHash;
         iDlgOffDate = 0;
         TInt m = 0;
         for ( m = 0; m < nmsgs; m++ )
             {
-            if ( msgs[ m ].iId == dlg[ got - 1 ].iTopMsg )
+            if ( msgs[ m ].iId == dlg[ off ].iTopMsg )
                 {
                 iDlgOffDate = msgs[ m ].iDate;
                 break;
@@ -5905,31 +6235,25 @@ void CSymgramSession::HandleHistoryL( const TUint8* aP, TInt aLen )
         {
         if ( Need( o, aLen, 8 ) != KErrNone )
             {
-            iBusy = EFalse;
-            iRpc = ERpcNone;
-            FlushPendingL();
+            FinishHistoryL();
             return;
             }
         const TUint32 flags = GetU32( aP + o );
         o += 8;
         if ( ( flags & 1u ) != 0 )
             {
-            if ( Need( o, aLen, 4 ) != KErrNone )
-                {
-                iBusy = EFalse;
-                iRpc = ERpcNone;
-                FlushPendingL();
-                return;
+                if ( Need( o, aLen, 4 ) != KErrNone )
+                    {
+                    FinishHistoryL();
+                    return;
+                    }
+                o += 4;
                 }
-            o += 4;
-            }
-        if ( ( flags & 4u ) != 0 )
+            if ( ( flags & 4u ) != 0 )
             {
             if ( Need( o, aLen, 4 ) != KErrNone )
                 {
-                iBusy = EFalse;
-                iRpc = ERpcNone;
-                FlushPendingL();
+                FinishHistoryL();
                 return;
                 }
             o += 4;
@@ -5939,9 +6263,7 @@ void CSymgramSession::HandleHistoryL( const TUint8* aP, TInt aLen )
         {
         if ( Need( o, aLen, 12 ) != KErrNone )
             {
-            iBusy = EFalse;
-            iRpc = ERpcNone;
-            FlushPendingL();
+            FinishHistoryL();
             return;
             }
         const TUint32 flags = GetU32( aP + o );
@@ -5950,9 +6272,7 @@ void CSymgramSession::HandleHistoryL( const TUint8* aP, TInt aLen )
             {
             if ( Need( o, aLen, 4 ) != KErrNone )
                 {
-                iBusy = EFalse;
-                iRpc = ERpcNone;
-                FlushPendingL();
+                FinishHistoryL();
                 return;
                 }
             o += 4;
@@ -5960,16 +6280,12 @@ void CSymgramSession::HandleHistoryL( const TUint8* aP, TInt aLen )
         }
     else if ( root != KMessages )
         {
-        iBusy = EFalse;
-        iRpc = ERpcNone;
-        FlushPendingL();
+        FinishHistoryL();
         return;
         }
     if ( Need( o, aLen, 8 ) != KErrNone || GetU32( aP + o ) != KTlVector )
         {
-        iBusy = EFalse;
-        iRpc = ERpcNone;
-        FlushPendingL();
+        FinishHistoryL();
         return;
         }
     const TInt mcount = (TInt)GetU32( aP + o + 4 );
@@ -5977,7 +6293,8 @@ void CSymgramSession::HandleHistoryL( const TUint8* aP, TInt aLen )
     iObserver.SessionBeginMessagesL( iPeerId );
     TInt scan = o;
     TInt got = 0;
-    TInt start[ 8 ];
+    TInt maxId = 0;
+    TInt start[ 50 ];
     while ( scan + 16 <= aLen && got < KHistLimit && got < mcount )
         {
         const TUint32 c = GetU32( aP + scan );
@@ -5993,6 +6310,10 @@ void CSymgramSession::HandleHistoryL( const TUint8* aP, TInt aLen )
                     {
                     start[ got ] = scan;
                     got++;
+                    if ( one.iId > maxId )
+                        {
+                        maxId = one.iId;
+                        }
                     }
                 if ( t > scan )
                     {
@@ -6002,6 +6323,10 @@ void CSymgramSession::HandleHistoryL( const TUint8* aP, TInt aLen )
                 }
             }
         scan += 4;
+        }
+    if ( maxId > 0 )
+        {
+        iReadMaxId = maxId;
         }
     TInt i = 0;
     for ( i = got - 1; i >= 0; i-- )
@@ -6027,13 +6352,10 @@ void CSymgramSession::HandleHistoryL( const TUint8* aP, TInt aLen )
         m.iBmp = NULL;
         iObserver.SessionAddMessageL( m );
         }
-    iBusy = EFalse;
-    iRpc = ERpcNone;
-    iState = EIdle;
     _LIT( KOn, "В сети" );
     iObserver.SessionStatusL( KOn );
     iObserver.SessionMessagesReadyL( iPeerId );
-    FlushPendingL();
+    FinishHistoryL();
     }
 
 void CSymgramSession::HandleFileL( const TUint8* aP, TInt aLen )
@@ -6043,7 +6365,14 @@ void CSymgramSession::HandleFileL( const TUint8* aP, TInt aLen )
         ClearSave();
         iBusy = EFalse;
         iRpc = ERpcNone;
-        FlushPendingL();
+        if ( iHomeDc != 0 )
+            {
+            RestoreHomeDcL();
+            }
+        else
+            {
+            FlushPendingL();
+            }
         return;
         }
     const TUint32 root = GetU32( aP );
@@ -6055,7 +6384,14 @@ void CSymgramSession::HandleFileL( const TUint8* aP, TInt aLen )
         iState = EIdle;
         _LIT( KCdn, "Файл на CDN" );
         iObserver.SessionStatusL( KCdn );
-        FlushPendingL();
+        if ( iHomeDc != 0 )
+            {
+            RestoreHomeDcL();
+            }
+        else
+            {
+            FlushPendingL();
+            }
         return;
         }
     if ( root != KUploadFile || aLen < 16 )
@@ -6063,7 +6399,14 @@ void CSymgramSession::HandleFileL( const TUint8* aP, TInt aLen )
         ClearSave();
         iBusy = EFalse;
         iRpc = ERpcNone;
-        FlushPendingL();
+        if ( iHomeDc != 0 )
+            {
+            RestoreHomeDcL();
+            }
+        else
+            {
+            FlushPendingL();
+            }
         return;
         }
     TInt o = 12;
@@ -6112,14 +6455,28 @@ void CSymgramSession::HandleFileL( const TUint8* aP, TInt aLen )
         iRpc = ERpcNone;
         iState = EIdle;
         iObserver.SessionFileSavedL( path, open );
-        FlushPendingL();
+        if ( iHomeDc != 0 )
+            {
+            RestoreHomeDcL();
+            }
+        else
+            {
+            FlushPendingL();
+            }
         return;
         }
     if ( len < 8 )
         {
         iBusy = EFalse;
         iRpc = ERpcNone;
-        FlushPendingL();
+        if ( iHomeDc != 0 )
+            {
+            RestoreHomeDcL();
+            }
+        else
+            {
+            FlushPendingL();
+            }
         return;
         }
     TPtrC8 jpeg( data, len );
@@ -6129,7 +6486,14 @@ void CSymgramSession::HandleFileL( const TUint8* aP, TInt aLen )
     iState = EIdle;
     _LIT( KOn, "В сети" );
     iObserver.SessionStatusL( KOn );
-    FlushPendingL();
+    if ( iHomeDc != 0 )
+        {
+        RestoreHomeDcL();
+        }
+    else
+        {
+        FlushPendingL();
+        }
     }
 
 void CSymgramSession::HandleSentL( const TUint8* aP, TInt aLen )
@@ -6582,12 +6946,22 @@ void CSymgramSession::HandleRpcResultL( const TUint8* aP, TInt aLen )
         iObserver.SessionCodeSentL();
         return;
         }
+    if ( c == KExportedAuth )
+        {
+        HandleExportAuthL( p, n );
+        return;
+        }
     if ( c == KAuthOk || c == KAuthOkOld )
         {
         iResumeTries = 0;
         iAuthed = ETrue;
         iPwdUtf.Zero();
         iSrpTries = 0;
+        if ( iRpc == ERpcImportAuth && iHomeDc != 0 )
+            {
+            SendGetFileNowL();
+            return;
+            }
         SaveSession();
         iObserver.SessionSignedInL();
         SendGetDialogsL();
@@ -6611,6 +6985,17 @@ void CSymgramSession::HandleRpcResultL( const TUint8* aP, TInt aLen )
         _LIT( KOn, "В сети" );
         iObserver.SessionStatusL( KOn );
         iObserver.SessionContactsReadyL();
+        FlushPendingL();
+        return;
+        }
+    if ( iRpc == ERpcRead &&
+         ( c == KBoolTrue || c == KBoolFalse || c == KAffectedMsgs ) )
+        {
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        iState = EIdle;
+        iNeedRead = EFalse;
+        iObserver.SessionPeerReadL( iPeerId );
         FlushPendingL();
         return;
         }
@@ -6653,6 +7038,16 @@ void CSymgramSession::HandleRpcResultL( const TUint8* aP, TInt aLen )
     if ( iRpc == ERpcSend )
         {
         HandleSentL( p, n );
+        return;
+        }
+    if ( iRpc == ERpcRead )
+        {
+        iBusy = EFalse;
+        iRpc = ERpcNone;
+        iState = EIdle;
+        iNeedRead = EFalse;
+        iObserver.SessionPeerReadL( iPeerId );
+        FlushPendingL();
         return;
         }
     if ( iAuthed )

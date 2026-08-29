@@ -2,7 +2,6 @@
 #include "SymgramVersion.h"
 
 #include <PathInfo.h>
-#include <commdb.h>
 
 namespace
     {
@@ -18,6 +17,11 @@ namespace
 
     void AppendRoot( TDes& aOut, const TDesC& aRoot, const TDesC& aSub )
         {
+        aOut.Zero();
+        if ( aRoot.Length() + aSub.Length() > aOut.MaxLength() )
+            {
+            return;
+            }
         aOut.Copy( aRoot );
         aOut.Append( aSub );
         }
@@ -232,9 +236,14 @@ void CSymgramUpdate::ScanDir( const TDesC& aDir )
     TInt pass = 0;
     for ( pass = 0; pass < 2; pass++ )
         {
+        const TDesC& wild = pass == 0 ? KSisx() : KSis();
         TFileName spec;
+        if ( aDir.Length() + wild.Length() > spec.MaxLength() )
+            {
+            continue;
+            }
         spec.Copy( aDir );
-        spec.Append( pass == 0 ? KSisx() : KSis() );
+        spec.Append( wild );
         CDir* list = NULL;
         if ( iFs.GetDir( spec, KEntryAttNormal, ESortByName, list ) != KErrNone )
             {
@@ -250,6 +259,10 @@ void CSymgramUpdate::ScanDir( const TDesC& aDir )
                 continue;
                 }
             TFileName path;
+            if ( aDir.Length() + e.iName.Length() > path.MaxLength() )
+                {
+                continue;
+                }
             path.Copy( aDir );
             path.Append( e.iName );
             ConsiderFile( path, e.iName );
@@ -281,6 +294,10 @@ void CSymgramUpdate::ConsiderFile( const TDesC& aPath, const TDesC& aName )
                 }
             }
         }
+    if ( aPath.Length() > iPkgPath.MaxLength() )
+        {
+        return;
+        }
     if ( pack > iPkgPack || ( pack == 0 && iPkgPath.Length() == 0 ) )
         {
         iPkgPath.Copy( aPath );
@@ -299,7 +316,6 @@ void CSymgramUpdate::ScanLocal()
     ScanDir( dir );
     AppendRoot( dir, PathInfo::MemoryCardRootPath(), PathInfo::InstallsPath() );
     ScanDir( dir );
-    ScanDir( PathInfo::MemoryCardRootPath() );
     }
 
 void CSymgramUpdate::PeekLocal()
@@ -332,22 +348,17 @@ void CSymgramUpdate::BeginNetL()
     CloseNet();
     iHost = 0;
     iHave = 0;
-    iBody->Des().Zero();
-    User::LeaveIfError( iConn.Open( iServ ) );
-    iPref = TCommDbConnPref();
-    iPref.SetDialogPreference( ECommDbDialogPrefDoNotPrompt );
-    iPref.SetDirection( ECommDbConnectionDirectionOutgoing );
-    iState = EStarting;
-    iConn.Start( iPref, iStatus );
-    SetActive();
+    if ( iBody )
+        {
+        iBody->Des().Zero();
+        }
+    // A second RConnection::Start on S60 3rd FP1 panics if Telegram
+    // already holds the IAP. Use the existing interface.
+    ResolveNextL();
     }
 
 void CSymgramUpdate::CloseNet()
     {
-    if ( IsActive() && iState != EIdle )
-        {
-        // Cancel() from destructor already called; here just close handles.
-        }
     iSocket.Close();
     iResolver.Close();
     iConn.Close();
@@ -357,18 +368,7 @@ void CSymgramUpdate::CloseNet()
 TInt CSymgramUpdate::OpenTcp()
     {
     iSocket.Close();
-    TInt err = KErrNotReady;
-    if ( iConn.SubSessionHandle() )
-        {
-        err = iSocket.Open( iServ, KAfInet, KSockStream,
-                            KProtocolInetTcp, iConn );
-        }
-    if ( err != KErrNone )
-        {
-        iSocket.Close();
-        err = iSocket.Open( iServ, KAfInet, KSockStream, KProtocolInetTcp );
-        }
-    return err;
+    return iSocket.Open( iServ, KAfInet, KSockStream, KProtocolInetTcp );
     }
 
 void CSymgramUpdate::ResolveNextL()
@@ -416,7 +416,17 @@ void CSymgramUpdate::ResolveNextL()
             break;
             }
         }
-    User::LeaveIfError( iResolver.Open( iServ, KAfInet, KProtocolInetUdp ) );
+    TInt err = iResolver.Open( iServ, KAfInet, KProtocolInetUdp );
+    if ( err != KErrNone )
+        {
+        err = iResolver.Open( iServ, KAfInet, KProtocolInetTcp );
+        }
+    if ( err != KErrNone )
+        {
+        iHost++;
+        ResolveNextL();
+        return;
+        }
     iState = EResolving;
     iResolver.GetByName( host, iNameEntry, iStatus );
     SetActive();
@@ -424,8 +434,20 @@ void CSymgramUpdate::ResolveNextL()
 
 void CSymgramUpdate::ConnectL()
     {
-    User::LeaveIfError( OpenTcp() );
-    iAddr = TInetAddr::Cast( iNameEntry().iAddr );
+    if ( OpenTcp() != KErrNone )
+        {
+        iHost++;
+        ResolveNextL();
+        return;
+        }
+    const TSockAddr& raw = iNameEntry().iAddr;
+    if ( raw.Family() != KAfInet )
+        {
+        iHost++;
+        ResolveNextL();
+        return;
+        }
+    iAddr = TInetAddr::Cast( raw );
     iAddr.SetPort( KHttpPort );
     iState = EConnecting;
     iSocket.Connect( iAddr, iStatus );
@@ -560,12 +582,6 @@ void CSymgramUpdate::FinishL( const TDesC& aText )
 void CSymgramUpdate::RunL()
     {
     const TInt err = iStatus.Int();
-    if ( iState == EStarting )
-        {
-        // No IAP is fine on some stubs; still try sockets.
-        ResolveNextL();
-        return;
-        }
     if ( err != KErrNone )
         {
         if ( iState == EReading && iHave > 0 )
@@ -609,9 +625,6 @@ void CSymgramUpdate::DoCancel()
     {
     switch ( iState )
         {
-        case EStarting:
-            iConn.Close();
-            break;
         case EResolving:
             iResolver.Cancel();
             break;

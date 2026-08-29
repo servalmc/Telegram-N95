@@ -116,6 +116,25 @@ RESOURCE TBUF r_symgram_about_text
     buf = STRING_r_symgram_about_text;
     }
 
+RESOURCE DIALOG r_symgram_update_query
+    {
+    flags = EGeneralQueryFlags;
+    buttons = R_AVKON_SOFTKEYS_YES_NO;
+    items =
+        {
+        DLG_LINE
+            {
+            type = EAknCtQuery;
+            id = EGeneralQuery;
+            control = AVKON_CONFIRMATION_QUERY
+                {
+                layout = EConfirmationQueryLayout;
+                label = STRING_r_symgram_update_confirm;
+                };
+            }
+        };
+    }
+
 RESOURCE TBUF r_symgram_status_offline
     {
     buf = STRING_r_symgram_status_offline;

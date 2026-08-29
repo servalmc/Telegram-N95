@@ -35,7 +35,9 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver,
         void OpenAttachmentL();
         void SaveAttachmentL();
         void LogoutAskL();
+        void ShowUpdateL();
         void CheckUpdateL();
+        void InstallUpdateL();
         TBool ShowNextCommand() const;
         TBool ShowCountryCommand() const;
         TBool ShowRefreshCommand() const;
@@ -43,6 +45,8 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver,
         TBool ShowWriteCommand() const;
         TBool ShowAttachCommand() const;
         TBool ShowLogoutCommand() const;
+        TBool CanGoBack() const;
+        TBool GoBack();
         void JpegReady( CFbsBitmap* aBmp, TInt aMsgId );
 
     public: // from CCoeControl
@@ -67,6 +71,7 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver,
         void SessionThumbL( TInt aMsgId, const TDesC8& aJpeg );
         void SessionFileSavedL( const TDesC& aPath, TBool aOpen );
         void SessionSentL( TInt aId, TInt aDate );
+        void SessionPeerReadL( TInt64 aPeer );
 
     private: // from MSymgramUpdateObserver
         void UpdateStatusL( const TDesC& aText );
@@ -92,6 +97,9 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver,
                                const HBufC* aTitle, const HBufC* aDetail ) const;
         void DrawTabs( CWindowGc& aGc, const TRect& aRect ) const;
         void DrawSettings( CWindowGc& aGc, const TRect& aRect ) const;
+        void DrawUpdate( CWindowGc& aGc, const TRect& aRect ) const;
+        void DrawSettingRow( CWindowGc& aGc, const TRect& aRow, TBool aOn,
+                             const TDesC& aTitle, const TDesC& aDetail ) const;
         void DrawContactRow( CWindowGc& aGc, const TRect& aRect,
                              TInt aIndex ) const;
         void DrawBubble( CWindowGc& aGc, const TRect& aBox,
@@ -115,6 +123,7 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver,
         void OpenChatAt( TInt aIndex );
         void OpenContact();
         void ClosePane();
+        void SyncSoftkeys();
         TBool ChatInTab( const TSymgramChat& aChat ) const;
         TInt ChatCount() const;
         TInt ChatIndex( TInt aRow ) const;
@@ -138,6 +147,8 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver,
         TInt CurrentCount() const;
         const CFont* ChatFont() const;
         void LoadEmojiL();
+        void TrimMessages();
+        void MarkChatRead( TInt64 aPeer );
 
     private:
         const CFont* iTitleFont;

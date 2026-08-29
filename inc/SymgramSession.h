@@ -30,6 +30,7 @@ class MSymgramSessionObserver
         virtual void SessionThumbL( TInt aMsgId, const TDesC8& aJpeg ) = 0;
         virtual void SessionFileSavedL( const TDesC& aPath, TBool aOpen ) = 0;
         virtual void SessionSentL( TInt aId, TInt aDate ) = 0;
+        virtual void SessionPeerReadL( TInt64 aPeer ) = 0;
     };
 
 class CSymgramSession : public CActive
@@ -78,7 +79,10 @@ class CSymgramSession : public CActive
             ERpcSend,
             ERpcFile,
             ERpcSavePart,
-            ERpcSaveFile
+            ERpcSaveFile,
+            ERpcRead,
+            ERpcExportAuth,
+            ERpcImportAuth
             };
 
         CSymgramSession( MSymgramSessionObserver& aObserver );
@@ -107,6 +111,9 @@ class CSymgramSession : public CActive
         void SendGetDialogsL();
         void SendGetContactsL();
         void SendGetHistoryNowL();
+        void SendReadHistoryNowL();
+        void FinishHistoryL();
+        void QueueReadIfNeeded();
         void SendTextNowL();
         void SendGetFileNowL();
         void SendSavePartNowL();
@@ -131,6 +138,13 @@ class CSymgramSession : public CActive
         void DropSavedSession();
         TBool IsDeadAuth( const TDesC8& aMsg ) const;
         TBool IsFileMigrate( const TDesC8& aMsg ) const;
+        TInt FileMigrateDc( const TDesC8& aMsg ) const;
+        void BeginFileHopL( TInt aDc );
+        void SendExportAuthL();
+        void HandleExportAuthL( const TUint8* aP, TInt aLen );
+        void SendImportAuthL();
+        void RestoreHomeDcL();
+        void ClearFileHop();
         void WrapInitL( const TDesC8& aQuery, TDes8& aOut );
         TInt StartPbkdfL( const TDesC8& aPassword );
         void StartSrpL();
@@ -229,12 +243,22 @@ class CSymgramSession : public CActive
         TInt64 iPeerId;
         TInt iPeerKind;
         TInt64 iPeerHash;
+        TBool iNeedRead;
+        TInt iReadMaxId;
         TBuf8<400> iSendUtf;
         TInt iFileMsgId;
         TInt64 iFileId;
         TInt64 iFileHash;
         TBuf8<96> iFileRef;
         TBool iFilePhoto;
+        TInt iHomeDc;
+        TBuf8<256> iHomeAuthKey;
+        TUint64 iHomeAuthKeyId;
+        TUint64 iHomeSalt;
+        TInt iFileDc;
+        TInt64 iExportId;
+        HBufC8* iExportBytes;
+        TBool iRestoreQuiet;
         TRpc iPendRpc;
         TBool iSaveFull;
         TBool iSaveOpen;

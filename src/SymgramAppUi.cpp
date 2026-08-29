@@ -47,6 +47,13 @@ void CSymgramAppUi::HandleCommandL( TInt aCommand )
             Exit();
             break;
 
+        case EAknSoftkeyBack:
+            if ( iAppView && iAppView->GoBack() )
+                {
+                break;
+                }
+            break;
+
         case ESymgramCmdNext:
             if ( iAppView )
                 {
@@ -127,7 +134,7 @@ void CSymgramAppUi::HandleCommandL( TInt aCommand )
         case ESymgramCmdUpdate:
             if ( iAppView )
                 {
-                iAppView->CheckUpdateL();
+                iAppView->ShowUpdateL();
                 }
             break;
 

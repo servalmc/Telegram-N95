@@ -364,7 +364,7 @@ void CSymgramStore::LoadMessagesL( TInt64 aPeer, RArray<TSymgramMsg>& aMsgs )
     const TInt n = (TInt)GetU32( p.Ptr() + 4 );
     TInt o = 8;
     TInt i = 0;
-    for ( i = 0; i < n && i < 40; i++ )
+    for ( i = 0; i < n && i < 50; i++ )
         {
         if ( o + 42 > p.Length() )
             {
@@ -407,9 +407,11 @@ void CSymgramStore::SaveMessages( TInt64 aPeer, const RArray<TSymgramMsg>& aMsgs
     TFileName fn;
     MsgFile( aPeer, fn );
     TInt n = aMsgs.Count();
-    if ( n > 40 )
+    TInt skip = 0;
+    if ( n > 50 )
         {
-        n = 40;
+        skip = n - 50;
+        n = 50;
         }
     HBufC8* raw = HBufC8::New( 8 + n * 500 );
     if ( !raw )
@@ -422,7 +424,7 @@ void CSymgramStore::SaveMessages( TInt64 aPeer, const RArray<TSymgramMsg>& aMsgs
     TInt i = 0;
     for ( i = 0; i < n; i++ )
         {
-        const TSymgramMsg& m = aMsgs[ i ];
+        const TSymgramMsg& m = aMsgs[ skip + i ];
         PutI32( p, m.iId );
         PutI32( p, m.iDate );
         p.Append( m.iOut ? 1 : 0 );

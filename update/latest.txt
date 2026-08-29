@@ -1,2 +1,2 @@
-v0.2.18
+v0.2.23
 https://github.com/servalmc/Telegram-N95/releases/latest
