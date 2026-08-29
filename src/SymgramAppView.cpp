@@ -19,6 +19,7 @@
 #include <avkon.rsg>
 #include <PathInfo.h>
 #include <w32std.h>
+#include <bautils.h>
 #include <Symgram.rsg>
 
 #include "SymgramVersion.h"
@@ -176,9 +177,13 @@ namespace
         0x1F600, 0x1F602, 0x1F60A, 0x1F60D, 0x1F609, 0x1F618,
         0x1F622, 0x1F62D, 0x1F621, 0x1F44D, 0x1F44E, 0x1F44C,
         0x2764,  0x1F525, 0x2B50,  0x1F389, 0x1F44F, 0x1F64F,
-        0x1F60E, 0x1F914, 0x1F605, 0x1F923, 0x1F49C, 0x2728
+        0x1F60E, 0x1F914, 0x1F605, 0x1F923, 0x1F49C, 0x2728,
+        0x1F970, 0x1F97A, 0x1F494, 0x1F4AF, 0x2705,  0x1F44B,
+        0x1F4AA, 0x1F339, 0x1F48B, 0x1F601, 0x1F631, 0x1F634,
+        0x1F917, 0x1F648, 0x1F61C, 0x1F644
         };
-    const TInt KEmojiCount = 24;
+    const TInt KEmojiCount = ESgEmojiCount;
+    const TInt KEmojiPickCount = ESgEmojiPickCount;
 
     TInt EmojiSlot( TUint aCp )
         {
@@ -191,6 +196,30 @@ namespace
                 }
             }
         return -1;
+        }
+
+    // Incoming messages use many more code points than the packed set.
+    // Map the rest onto the nearest Apple glyph so the chat does not fall
+    // back to the old geometric circles.
+    TInt EmojiNearest( TUint aCp )
+        {
+        const TInt exact = EmojiSlot( aCp );
+        if ( exact >= 0 )
+            {
+            return exact;
+            }
+        switch ( EmojiStyle( aCp ) )
+            {
+            case 1: return 12;
+            case 2: return 9;
+            case 3: return 10;
+            case 4: return 13;
+            case 5: return 14;
+            case 6: return 4;
+            case 7: return 6;
+            case 8: return 2;
+            default: return 0;
+            }
         }
 
     void FoldVisible( TDes& aText )
@@ -431,7 +460,7 @@ namespace
                     }
                 CFbsBitmap* bmp = NULL;
                 CFbsBitmap* mask = NULL;
-                const TInt slot = EmojiSlot( cp );
+                const TInt slot = EmojiNearest( cp );
                 if ( slot >= 0 && aBmp && aMask )
                     {
                     bmp = aBmp[ slot ];
@@ -701,7 +730,8 @@ void CSymgramAppView::ConstructL( const TRect& aRect )
     if ( iTextFont )
         {
         TFontSpec spec = iTextFont->FontSpecInTwips();
-        spec.iHeight = ( spec.iHeight * 5 ) / 2;
+        // 0.2.16 used 2.5x; 40% smaller is 1.5x of the system secondary font.
+        spec.iHeight = ( spec.iHeight * 3 ) / 2;
         TRAPD( ferr, iChatFont = iCoeEnv->CreateScreenFontL( spec ) );
         if ( ferr != KErrNone )
             {
@@ -765,9 +795,19 @@ const CFont* CSymgramAppView::ChatFont() const
 void CSymgramAppView::LoadEmojiL()
     {
     TFileName fn;
-    _LIT( KFile, "\\resource\\apps\\Symgram_emoji.mbm" );
-    fn.Copy( KFile );
-    User::LeaveIfError( CompleteWithAppPath( fn ) );
+    TFindFile finder( iCoeEnv->FsSession() );
+    _LIT( KName, "Symgram_emoji.mbm" );
+    _LIT( KDir, "\\resource\\apps\\" );
+    if ( finder.FindByDir( KName, KDir ) == KErrNone )
+        {
+        fn.Copy( finder.File() );
+        }
+    else
+        {
+        _LIT( KFile, "\\resource\\apps\\Symgram_emoji.mbm" );
+        fn.Copy( KFile );
+        User::LeaveIfError( CompleteWithAppPath( fn ) );
+        }
     TInt i = 0;
     for ( i = 0; i < KEmojiCount; i++ )
         {
@@ -775,11 +815,17 @@ void CSymgramAppView::LoadEmojiL()
         CleanupStack::PushL( bmp );
         CFbsBitmap* mask = new ( ELeave ) CFbsBitmap;
         CleanupStack::PushL( mask );
-        User::LeaveIfError( bmp->Load( fn, i * 2 ) );
-        User::LeaveIfError( mask->Load( fn, i * 2 + 1 ) );
-        iEmojiBmp[ i ] = bmp;
-        iEmojiMask[ i ] = mask;
-        CleanupStack::Pop( 2 );
+        if ( bmp->Load( fn, i * 2 ) == KErrNone &&
+             mask->Load( fn, i * 2 + 1 ) == KErrNone )
+            {
+            iEmojiBmp[ i ] = bmp;
+            iEmojiMask[ i ] = mask;
+            CleanupStack::Pop( 2 );
+            }
+        else
+            {
+            CleanupStack::PopAndDestroy( 2 );
+            }
         }
     }
 
@@ -1081,7 +1127,7 @@ void CSymgramAppView::HandleArrowL( TInt aDir )
                 {
                 iPickSel -= cols;
                 }
-            else if ( aDir == 2 && iPickSel + cols < KEmojiCount )
+            else if ( aDir == 2 && iPickSel + cols < KEmojiPickCount )
                 {
                 iPickSel += cols;
                 }
@@ -1089,7 +1135,7 @@ void CSymgramAppView::HandleArrowL( TInt aDir )
                 {
                 iPickSel--;
                 }
-            else if ( aDir == 4 && iPickSel + 1 < KEmojiCount )
+            else if ( aDir == 4 && iPickSel + 1 < KEmojiPickCount )
                 {
                 iPickSel++;
                 }
@@ -3039,7 +3085,7 @@ void CSymgramAppView::PickEmojiL()
 
 void CSymgramAppView::SendPickedEmojiL()
     {
-    if ( iPickSel < 0 || iPickSel >= KEmojiCount )
+    if ( iPickSel < 0 || iPickSel >= KEmojiPickCount )
         {
         return;
         }
@@ -3177,7 +3223,7 @@ void CSymgramAppView::SendPickedPhotoL()
 void CSymgramAppView::DrawEmojiPicker( CWindowGc& aGc, const TRect& aRect ) const
     {
     const TInt cols = 6;
-    const TInt rows = ( KEmojiCount + cols - 1 ) / cols;
+    const TInt rows = ( KEmojiPickCount + cols - 1 ) / cols;
     const TInt cw = aRect.Width() / cols;
     TInt ch = aRect.Height() / ( rows + 1 );
     if ( ch > cw )
@@ -3185,7 +3231,7 @@ void CSymgramAppView::DrawEmojiPicker( CWindowGc& aGc, const TRect& aRect ) cons
         ch = cw;
         }
     TInt i = 0;
-    for ( i = 0; i < KEmojiCount; i++ )
+    for ( i = 0; i < KEmojiPickCount; i++ )
         {
         const TInt col = i % cols;
         const TInt row = i / cols;

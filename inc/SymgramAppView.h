@@ -13,6 +13,8 @@ class CSymgramJpeg;
 class CFbsBitmap;
 class CSymgramUpdate;
 
+enum { ESgEmojiCount = 40, ESgEmojiPickCount = 24 };
+
 class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver,
                         public MSymgramUpdateObserver
     {
@@ -155,8 +157,8 @@ class CSymgramAppView : public CCoeControl, public MSymgramSessionObserver,
         const CFont* iNameFont;
         const CFont* iTextFont;
         CFont* iChatFont;
-        CFbsBitmap* iEmojiBmp[ 24 ];
-        CFbsBitmap* iEmojiMask[ 24 ];
+        CFbsBitmap* iEmojiBmp[ ESgEmojiCount ];
+        CFbsBitmap* iEmojiMask[ ESgEmojiCount ];
 
         HBufC* iStatus;
         HBufC* iSignInTitle;

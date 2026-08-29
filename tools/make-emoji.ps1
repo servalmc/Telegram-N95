@@ -1,8 +1,7 @@
-# Builds 24-bit colour BMPs and 8-bit soft masks from emoji-data Twemoji PNGs.
+# Builds 24-bit colour BMPs and 8-bit soft masks from emoji-data Apple PNGs.
 #
-# Source: img-twitter-64 (Twemoji). Those PNGs are 32bpp with a real alpha
-# channel; Apple/Google sets in the same zip also have alpha, but Twemoji
-# edges stay clean at 32px on a 240-wide N95 screen.
+# Source: img-apple-64 (Telegram-style). Those PNGs are 32bpp with a real
+# alpha channel. Twitter is used only if Apple is missing a code point.
 #
 # mifconv /c24,8 looks for <name>_mask_soft.bmp next to <name>.bmp and stores
 # the grey values as an 8-bit mask, so anti-aliased edges are kept.
@@ -10,7 +9,7 @@
 param(
     [string]$ZipPath = "C:\Users\serval\Downloads\emoji-data-16.0.0.zip",
     [string]$OutDir = (Join-Path $PSScriptRoot "..\gfx\emoji"),
-    [int]$Size = 32
+    [int]$Size = 24
 )
 
 $ErrorActionPreference = "Stop"
@@ -29,13 +28,18 @@ $codes = @(
     "1f600","1f602","1f60a","1f60d","1f609","1f618",
     "1f622","1f62d","1f621","1f44d","1f44e","1f44c",
     "2764","1f525","2b50","1f389","1f44f","1f64f",
-    "1f60e","1f914","1f605","1f923","1f49c","2728"
+    "1f60e","1f914","1f605","1f923","1f49c","2728",
+    "1f970","1f97a","1f494","1f4af","2705","1f44b",
+    "1f4aa","1f339","1f48b","1f601","1f631","1f634",
+    "1f917","1f648","1f61c","1f644"
 )
 
 $z = [IO.Compression.ZipFile]::OpenRead($ZipPath)
 
 function Find-Png([string]$hex) {
     $names = @(
+        "emoji-data-16.0.0/img-apple-64/$hex.png",
+        "emoji-data-16.0.0/img-apple-64/$hex-fe0f.png",
         "emoji-data-16.0.0/img-twitter-64/$hex.png",
         "emoji-data-16.0.0/img-twitter-64/$hex-fe0f.png"
     )
@@ -55,7 +59,7 @@ foreach ($hex in $codes) {
     $entry = Find-Png $hex
     if (-not $entry) {
         $z.Dispose()
-        throw "missing twitter-64 PNG for $hex"
+        throw "missing Apple/Twemoji PNG for $hex"
     }
     $ms = New-Object IO.MemoryStream
     $stream = $entry.Open()

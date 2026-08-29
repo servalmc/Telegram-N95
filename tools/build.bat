@@ -33,7 +33,7 @@ if not exist emoji\e00.bmp (
 )
 set "EMOJI_ARGS="
 for /L %%i in (0,1,9) do set "EMOJI_ARGS=!EMOJI_ARGS! /c24,8 emoji\e0%%i.bmp"
-for /L %%i in (10,1,23) do set "EMOJI_ARGS=!EMOJI_ARGS! /c24,8 emoji\e%%i.bmp"
+for /L %%i in (10,1,39) do set "EMOJI_ARGS=!EMOJI_ARGS! /c24,8 emoji\e%%i.bmp"
 call mifconv Symgram_emoji.mif /HSymgram_emoji.mbg !EMOJI_ARGS! || exit /b 1
 copy /y Symgram_emoji.mbm "%SYMBIAN_SDK%\epoc32\data\z\resource\apps\" >nul || exit /b 1
 

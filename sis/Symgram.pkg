@@ -2,7 +2,7 @@
 ; Language order below drives the {} blocks: first entry is Russian, second English.
 &RU,EN
 
-#{"Symgram","Symgram"},(0xE0A11E95),0,2,23
+#{"Symgram","Symgram"},(0xE0A11E95),0,2,24
 
 %{"Symgram","Symgram"}
 :"Symgram"
